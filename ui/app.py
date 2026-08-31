@@ -1,9 +1,15 @@
 """Central PySide6 GUI Application and Coordinator for Iris."""
 
+import os
 import sys
 import threading
 from typing import Optional
-from PySide6.QtCore import QObject, Signal, QThread
+
+# Ensure high-DPI scaling before Qt initializes
+os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+os.environ.setdefault("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough")
+
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
 
 from config import config
@@ -20,6 +26,8 @@ from ui.formatter import extract_concise_spoken_summary
 
 
 class AgentWorkerSignals(QObject):
+    user_message_received = Signal(str)
+    assistant_started = Signal()
     chunk_received = Signal(str)
     response_completed = Signal(str, bool)  # full_response, is_voice
     error_occurred = Signal(str)
@@ -64,12 +72,12 @@ class IrisUIApp:
         self.overlay = VoiceListeningOverlay()
         self.hotkey_listener = GlobalUIHotkeyListener(config.ui_hotkey)
 
-        # Worker signals for thread safety
+        # Worker signals for cross-thread GUI safety
         self.signals = AgentWorkerSignals()
         self._connect_signals()
 
     def _connect_signals(self) -> None:
-        """Binds Qt signals between components."""
+        """Binds Qt signals strictly to the main GUI thread."""
         # 1. Hotkey toggle (Ctrl+Shift+T)
         self.hotkey_listener.signals.toggle_hud.connect(self.chat_window.toggle_visibility)
 
@@ -77,7 +85,9 @@ class IrisUIApp:
         self.chat_window.message_submitted.connect(self._handle_user_message)
         self.chat_window.voice_toggled.connect(self._handle_mic_button_clicked)
 
-        # 3. Agent streaming signals -> UI updates
+        # 3. Thread-safe Agent signals -> UI updates
+        self.signals.user_message_received.connect(self.chat_window.add_user_message)
+        self.signals.assistant_started.connect(self.chat_window.start_assistant_message)
         self.signals.chunk_received.connect(self.chat_window.append_assistant_chunk)
         self.signals.response_completed.connect(self._on_response_completed)
         self.signals.state_changed.connect(self._on_state_changed)
@@ -119,7 +129,7 @@ class IrisUIApp:
                 self.signals.state_changed.emit("listening", "Listening for 5s...")
                 transcription = self.voice.listen(duration_seconds=5.0)
                 if transcription and transcription.strip():
-                    self.chat_window.add_user_message(transcription)
+                    self.signals.user_message_received.emit(transcription)
                     self._process_text_query(transcription, is_voice_reply=True)
                 else:
                     self.signals.state_changed.emit("idle", "")
@@ -140,14 +150,13 @@ class IrisUIApp:
 
     def _process_voice_query(self, query: str) -> None:
         """Processes voice command: shows in chat window, runs agent, speaks concise summary."""
-        # Ensure HUD has user's transcribed question
-        self.chat_window.add_user_message(query)
+        self.signals.user_message_received.emit(query)
         self._process_text_query(query, is_voice_reply=True)
 
     def _process_text_query(self, user_input: str, is_voice_reply: bool = False) -> None:
         """Streams agent response and triggers spoken output if required."""
         self.signals.state_changed.emit("thinking", "Iris is thinking...")
-        self.chat_window.start_assistant_message()
+        self.signals.assistant_started.emit()
 
         try:
             full_response = ""
@@ -187,7 +196,6 @@ class IrisUIApp:
         self.chat_window.finish_assistant_message(full_text)
 
         if is_voice and config.voice_enabled or is_voice:
-            # Voice Mode: extract short, compact, articulate summary for TTS
             spoken_summary = extract_concise_spoken_summary(full_text)
             if spoken_summary:
                 self.signals.state_changed.emit("speaking", "Iris is speaking...")
