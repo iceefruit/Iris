@@ -202,10 +202,14 @@ class IrisUIApp:
                 self.signals.state_changed.emit("speaking", "Iris is speaking...")
 
                 def _speak_thread():
-                    self.voice.speak(spoken_summary, block=True)
-                    # Multi-turn conversation: remain open for follow-up turns without wake-word
-                    self.voice.activate_follow_up(duration_seconds=7.0)
-                    self.signals.state_changed.emit("listening", "Listening for follow-up...")
+                    try:
+                        self.voice.speak(spoken_summary, block=True)
+                    except Exception as err:
+                        print(f"[Voice Playback Error]: {err}")
+                    finally:
+                        # Multi-turn conversation: remain open for follow-up turns without wake-word
+                        self.voice.activate_follow_up(duration_seconds=7.0)
+                        self.signals.state_changed.emit("listening", "Listening for follow-up...")
 
                 threading.Thread(target=_speak_thread, daemon=True).start()
             else:

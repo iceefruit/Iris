@@ -130,144 +130,147 @@ class ContinuousVoiceListener:
         self._in_follow_up_state = False
 
     def _listener_loop(self) -> None:
-        """Audio stream consumer detecting voice triggers and handling barge-in."""
+        """Audio stream consumer with infinite auto-reconnect and wake-word/follow-up detection."""
         block_size = int(self.samplerate * 0.1)  # 100ms blocks
         audio_buffer = []
         is_speaking = False
         silence_start = 0.0
 
-        try:
-            with sd.InputStream(
-                samplerate=self.samplerate,
-                channels=1,
-                dtype="float32",
-                blocksize=block_size,
-            ) as stream:
-                while not self._stop_event.is_set():
-                    now = time.time()
+        while not self._stop_event.is_set():
+            try:
+                with sd.InputStream(
+                    samplerate=self.samplerate,
+                    channels=1,
+                    dtype="float32",
+                    blocksize=block_size,
+                ) as stream:
+                    while not self._stop_event.is_set():
+                        now = time.time()
 
-                    # Check follow-up expiration
-                    if self._in_follow_up_state and now > self._follow_up_expiry:
-                        self._in_follow_up_state = False
-                        self._follow_up_expiry = 0.0
-                        if self.on_state_change and not is_speaking:
-                            try:
-                                self.on_state_change("idle", None)
-                            except Exception:
-                                pass
-
-                    data, _ = stream.read(block_size)
-                    audio_flat = data.flatten()
-                    rms = np.sqrt(np.mean(audio_flat**2))
-
-                    # 1. Hardware Echo Suppression: Mute mic recording while Iris is speaking out loud
-                    is_tts_active = bool(self.tts_player and getattr(self.tts_player, "is_speaking", False))
-                    if is_tts_active:
-                        self._tts_last_active_time = now
-                        audio_buffer = []
-                        is_speaking = False
-                        time.sleep(0.02)
-                        continue
-
-                    # Post-TTS speaker reverberation cooldown (0.5s grace period)
-                    if now - self._tts_last_active_time < 0.5:
-                        audio_buffer = []
-                        is_speaking = False
-                        time.sleep(0.02)
-                        continue
-
-                    # 2. Voice Activity Detection
-                    if rms > self.energy_threshold:
-                        if not is_speaking:
-                            is_speaking = True
-                            audio_buffer = []
-                            if self.on_state_change:
+                        # Check follow-up expiration
+                        if self._in_follow_up_state and now > self._follow_up_expiry:
+                            self._in_follow_up_state = False
+                            self._follow_up_expiry = 0.0
+                            if self.on_state_change and not is_speaking:
                                 try:
-                                    prompt_label = "Listening for follow-up..." if self._in_follow_up_state else "Iris is listening..."
-                                    self.on_state_change("listening", prompt_label)
+                                    self.on_state_change("idle", None)
                                 except Exception:
                                     pass
-                        audio_buffer.append(audio_flat)
-                        silence_start = time.time()
-                    elif is_speaking:
-                        audio_buffer.append(audio_flat)
-                        if time.time() - silence_start > self.silence_duration:
-                            # Speech ended -> Process & Transcribe
-                            full_audio = np.concatenate(audio_buffer)
-                            is_speaking = False
-                            audio_buffer = []
 
-                            if len(full_audio) > self.samplerate * 0.4:  # At least 0.4s of speech
+                        data, _ = stream.read(block_size)
+                        audio_flat = data.flatten()
+                        rms = np.sqrt(np.mean(audio_flat**2))
+
+                        # 1. Hardware Echo Suppression: Mute mic recording while Iris is speaking out loud
+                        is_tts_active = bool(self.tts_player and getattr(self.tts_player, "is_speaking", False))
+                        if is_tts_active:
+                            self._tts_last_active_time = now
+                            audio_buffer = []
+                            is_speaking = False
+                            time.sleep(0.02)
+                            continue
+
+                        # Post-TTS speaker reverberation cooldown (0.5s grace period)
+                        if now - self._tts_last_active_time < 0.5:
+                            audio_buffer = []
+                            is_speaking = False
+                            time.sleep(0.02)
+                            continue
+
+                        # 2. Voice Activity Detection
+                        if rms > self.energy_threshold:
+                            if not is_speaking:
+                                is_speaking = True
+                                audio_buffer = []
                                 if self.on_state_change:
                                     try:
-                                        self.on_state_change("thinking", "Transcribing...")
+                                        prompt_label = "Listening for follow-up..." if self._in_follow_up_state else "Iris is listening..."
+                                        self.on_state_change("listening", prompt_label)
                                     except Exception:
                                         pass
-                                raw_text = self.transcriber.transcribe_audio_array(full_audio)
-                                if raw_text:
-                                    # 3. Acoustic Echo Cancellation: Discard any transcribed text matching Iris's own voice
-                                    if is_acoustic_echo(raw_text, self.last_spoken_text):
-                                        audio_buffer = []
-                                        is_speaking = False
-                                        continue
+                            audio_buffer.append(audio_flat)
+                            silence_start = time.time()
+                        elif is_speaking:
+                            audio_buffer.append(audio_flat)
+                            if time.time() - silence_start > self.silence_duration:
+                                # Speech ended -> Process & Transcribe
+                                full_audio = np.concatenate(audio_buffer)
+                                is_speaking = False
+                                audio_buffer = []
 
-                                    in_follow_up = self._in_follow_up_state or (time.time() < self._follow_up_expiry)
+                                if len(full_audio) > self.samplerate * 0.4:  # At least 0.4s of speech
+                                    if self.on_state_change:
+                                        try:
+                                            self.on_state_change("thinking", "Transcribing...")
+                                        except Exception:
+                                            pass
+                                    raw_text = self.transcriber.transcribe_audio_array(full_audio)
+                                    if raw_text and raw_text.strip():
+                                        # 3. Acoustic Echo Cancellation (only active within 2.0s of TTS completion)
+                                        if (now - self._tts_last_active_time < 2.0) and is_acoustic_echo(raw_text, self.last_spoken_text):
+                                            audio_buffer = []
+                                            is_speaking = False
+                                            continue
 
-                                    if self.require_wake_word and not in_follow_up:
-                                        clean_query = extract_wake_word_query(raw_text, self.trigger_word)
-                                        if clean_query:
-                                            self._in_follow_up_state = False
-                                            if self.on_state_change:
-                                                try:
-                                                    self.on_state_change("thinking", "Iris is thinking...")
-                                                except Exception:
-                                                    pass
-                                            if self.on_speech_detected:
+                                        in_follow_up = self._in_follow_up_state or (time.time() < self._follow_up_expiry)
+
+                                        if self.require_wake_word and not in_follow_up:
+                                            clean_query = extract_wake_word_query(raw_text, self.trigger_word)
+                                            if clean_query:
+                                                self._in_follow_up_state = False
+                                                if self.on_state_change:
+                                                    try:
+                                                        self.on_state_change("thinking", "Iris is thinking...")
+                                                    except Exception:
+                                                        pass
+                                                if self.on_speech_detected:
+                                                    try:
+                                                        self.on_speech_detected(clean_query)
+                                                    except Exception as err:
+                                                        print(f"[Continuous Listener Callback Error]: {err}")
+                                            else:
+                                                if self.on_state_change:
+                                                    try:
+                                                        self.on_state_change("idle", None)
+                                                    except Exception:
+                                                        pass
+                                        else:
+                                            # Active conversational mode or follow-up turn
+                                            clean_query = extract_wake_word_query(raw_text, self.trigger_word) or raw_text.strip()
+                                            clean_lower = clean_query.lower()
+
+                                            # Stop phrases to exit conversation gracefully
+                                            if clean_lower in ("stop", "bye", "goodbye", "nevermind", "cancel", "exit", "quiet", "thanks", "thank you"):
+                                                self._in_follow_up_state = False
+                                                self._follow_up_expiry = 0.0
+                                                if self.on_state_change:
+                                                    try:
+                                                        self.on_state_change("idle", None)
+                                                    except Exception:
+                                                        pass
+                                            elif clean_query and self.on_speech_detected:
+                                                self._in_follow_up_state = False
+                                                if self.on_state_change:
+                                                    try:
+                                                        self.on_state_change("thinking", "Iris is thinking...")
+                                                    except Exception:
+                                                        pass
                                                 try:
                                                     self.on_speech_detected(clean_query)
                                                 except Exception as err:
                                                     print(f"[Continuous Listener Callback Error]: {err}")
-                                        else:
-                                            if self.on_state_change:
-                                                try:
-                                                    self.on_state_change("idle", None)
-                                                except Exception:
-                                                    pass
                                     else:
-                                        # Active conversational mode or follow-up turn
-                                        clean_query = extract_wake_word_query(raw_text, self.trigger_word) or raw_text.strip()
-                                        clean_lower = clean_query.lower()
-
-                                        # Stop phrases to exit conversation gracefully
-                                        if clean_lower in ("stop", "bye", "goodbye", "nevermind", "cancel", "exit", "quiet", "thanks", "thank you"):
-                                            self._in_follow_up_state = False
-                                            self._follow_up_expiry = 0.0
-                                            if self.on_state_change:
-                                                try:
-                                                    self.on_state_change("idle", None)
-                                                except Exception:
-                                                    pass
-                                        elif clean_query and self.on_speech_detected:
-                                            self._in_follow_up_state = False
-                                            if self.on_state_change:
-                                                try:
-                                                    self.on_state_change("thinking", "Iris is thinking...")
-                                                except Exception:
-                                                    pass
+                                        if self.on_state_change and not self._in_follow_up_state:
                                             try:
-                                                self.on_speech_detected(clean_query)
-                                            except Exception as err:
-                                                print(f"[Continuous Listener Callback Error]: {err}")
-                                else:
-                                    if self.on_state_change and not self._in_follow_up_state:
-                                        try:
-                                            self.on_state_change("idle", None)
-                                        except Exception:
-                                            pass
+                                                self.on_state_change("idle", None)
+                                            except Exception:
+                                                pass
 
-                    time.sleep(0.01)
+                        time.sleep(0.01)
 
-        except Exception as e:
-            print(f"[Continuous Listener Warning]: {e}")
-        finally:
-            self._is_listening = False
+            except Exception as e:
+                if not self._stop_event.is_set():
+                    print(f"[Continuous Listener Warning]: Audio stream error: {e}. Reconnecting...")
+                    time.sleep(0.5)
+
+        self._is_listening = False

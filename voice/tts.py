@@ -69,18 +69,15 @@ class EdgeTTSPlayer:
         self._is_speaking = True
 
         try:
-            # Run async synthesis in a clean event loop
+            # Run async synthesis in an isolated fresh event loop for 100% thread safety
+            loop = asyncio.new_event_loop()
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # If called inside an active loop, use a new thread or nest
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        audio_bytes = executor.submit(asyncio.run, self._synthesize_to_bytes(clean_text)).result()
-                else:
-                    audio_bytes = loop.run_until_complete(self._synthesize_to_bytes(clean_text))
-            except RuntimeError:
-                audio_bytes = asyncio.run(self._synthesize_to_bytes(clean_text))
+                audio_bytes = loop.run_until_complete(self._synthesize_to_bytes(clean_text))
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
 
             if not audio_bytes or self._stop_event.is_set():
                 return False
