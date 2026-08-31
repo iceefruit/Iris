@@ -13,20 +13,28 @@ class IrisAgent:
     def ask(
         self, user_input: str, file_paths: Optional[List[str]] = None
     ) -> Generator[StreamChunk, None, None]:
-        """Ingests user input, queries Miko API, streams chunks, and updates context."""
+        """Sends the user turn to Miko API and streams back chunk events.
+        
+        Miko API maintains conversational context on the server side using
+        (username, userid). Thus, we send only the new prompt message to the API,
+        while maintaining local memory for display and logging.
+        """
+        # Store in local history
         self.memory.add_message(role="user", content=user_input)
-        context = self.memory.get_context()
 
-        # Handle file uploads if requested
+        # Upload files if provided
         server_files = None
         if file_paths:
             server_files = self.client.upload_files(file_paths)
+
+        # Send only the new user message to Miko API as per Miko docs specification
+        messages_payload = [{"role": "user", "content": user_input}]
 
         full_response_accumulator = []
 
         try:
             for chunk in self.client.stream_chat(
-                messages=context,
+                messages=messages_payload,
                 service=config.service,
                 search=config.search,
                 thinking=config.thinking,
@@ -37,7 +45,7 @@ class IrisAgent:
                     full_response_accumulator.append(chunk.text)
                 yield chunk
 
-            # Store the assistant turn in memory
+            # Store completed turn into local memory
             full_response = "".join(full_response_accumulator)
             if full_response:
                 self.memory.add_message(role="assistant", content=full_response)
@@ -50,6 +58,6 @@ class IrisAgent:
             yield error_chunk
 
     def clear(self) -> bool:
-        """Clears both local context window and server-side session memory."""
+        """Clears both local context window and Miko server-side session memory."""
         self.memory.clear()
         return self.client.clear_history()

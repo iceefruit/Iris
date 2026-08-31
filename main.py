@@ -42,7 +42,7 @@ def main():
             f"[dim]Endpoint:[/dim] {config.base_url}\n"
             f"[dim]Service:[/dim]  {config.service}\n"
             f"[dim]User:[/dim]     {config.username} ({config.userid})\n"
-            f"[dim]Features:[/dim] Search={config.search} | Thinking={config.thinking}\n"
+            f"[dim]Features:[/dim] Search={'[green]Enabled[/green]' if config.search else '[dim]Disabled[/dim]'} | Thinking={'[green]Enabled[/green]' if config.thinking else '[dim]Disabled[/dim]'}\n"
             f"[dim]Commands:[/dim] [yellow]'clear'[/yellow] to reset session, [yellow]'exit'[/yellow] to quit.",
             title="✨ Iris Initialized (Miko API)",
             border_style="cyan",
@@ -63,13 +63,17 @@ def main():
 
             if user_input.lower() == "clear":
                 agent.clear()
-                console.print("[yellow]Local context and server-side history cleared.[/yellow]")
+                console.print("[yellow]Local context and server session history cleared.[/yellow]")
                 continue
 
             console.print("[bold cyan]Iris > [/bold cyan]", end="")
             in_thinking = False
+            sources_to_show = []
+
             for chunk in agent.ask(user_input):
-                if chunk.chunk_type == "thinking":
+                if chunk.chunk_type == "function_call":
+                    console.print("\n[dim yellow]🔍 Searching the web...[/dim yellow]")
+                elif chunk.chunk_type == "thinking":
                     if not in_thinking:
                         console.print("\n[dim italic]Thinking: ", end="")
                         in_thinking = True
@@ -79,8 +83,18 @@ def main():
                         console.print("[/dim italic]\n")
                         in_thinking = False
                     console.print(chunk.text, end="", style="white")
+                elif chunk.chunk_type == "final":
+                    if chunk.metadata and isinstance(chunk.metadata, dict):
+                        searched_urls = chunk.metadata.get("searched_urls", [])
+                        if searched_urls:
+                            sources_to_show = searched_urls
                 elif chunk.chunk_type == "error":
                     console.print(chunk.text, style="bold red")
+
+            if sources_to_show:
+                console.print("\n\n[dim cyan]🌐 Sources:[/dim cyan]")
+                for idx, url in enumerate(sources_to_show, 1):
+                    console.print(f"  [dim][{idx}] {url}[/dim]")
 
             console.print()
 

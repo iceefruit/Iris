@@ -15,13 +15,13 @@ class Message:
 
 @dataclass
 class StreamChunk:
-    chunk_type: str  # 'content' | 'thinking' | 'error' | 'final'
+    chunk_type: str  # 'content' | 'thinking' | 'function_call' | 'function_result' | 'final' | 'error'
     text: str
     metadata: Optional[Dict[str, Any]] = None
 
 
 class MemoryProtocol(Protocol):
-    """Contract for managing conversation context."""
+    """Contract for local session tracking."""
 
     def add_message(self, role: str, content: str) -> None:
         ...
@@ -40,7 +40,7 @@ class LLMClientProtocol(Protocol):
         self,
         messages: List[Dict[str, str]],
         service: Optional[str] = None,
-        search: bool = False,
+        search: bool = True,
         thinking: bool = False,
         system_prompt: Optional[str] = None,
         files: Optional[List[str]] = None,

@@ -30,8 +30,8 @@ class AppConfig(BaseSettings):
         validation_alias="MIKO_USERID"
     )
 
-    # Model Features
-    search: bool = Field(default=False, validation_alias="MIKO_SEARCH")
+    # Model Features (Search enabled by default for real-time web awareness)
+    search: bool = Field(default=True, validation_alias="MIKO_SEARCH")
     thinking: bool = Field(default=False, validation_alias="MIKO_THINKING")
 
     # Behavior

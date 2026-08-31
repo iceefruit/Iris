@@ -1,4 +1,4 @@
-﻿"""Low-latency client for the Miko API (https://api-miko.yokoya.space)."""
+﻿"""Low-latency streaming client for Miko API (https://api-miko.yokoya.space)."""
 
 import json
 import httpx
@@ -31,12 +31,12 @@ class MikoClient(LLMClientProtocol):
         self,
         messages: List[Dict[str, str]],
         service: Optional[str] = None,
-        search: bool = False,
+        search: bool = True,
         thinking: bool = False,
         system_prompt: Optional[str] = None,
         files: Optional[List[str]] = None,
     ) -> Generator[StreamChunk, None, None]:
-        """Streams response chunks from Miko /chat endpoint."""
+        """Streams real-time events from Miko /chat endpoint."""
         url = f"{self.base_url}/chat"
         payload: Dict[str, Any] = {
             "service": service or self.default_service,
@@ -73,29 +73,49 @@ class MikoClient(LLMClientProtocol):
                         try:
                             data = json.loads(data_str)
                             chunk_type = data.get("type", "content")
-                            
+
                             if chunk_type == "content":
                                 content = data.get("content", "")
                                 if content:
                                     yield StreamChunk(chunk_type="content", text=content)
+
                             elif chunk_type == "thinking":
                                 reasoning = data.get("content", "")
                                 if reasoning:
                                     yield StreamChunk(chunk_type="thinking", text=reasoning)
+
+                            elif chunk_type == "function_call":
+                                call_info = data.get("call") or data.get("content") or json.dumps(data)
+                                yield StreamChunk(
+                                    chunk_type="function_call",
+                                    text=str(call_info),
+                                    metadata=data
+                                )
+
+                            elif chunk_type == "function_result":
+                                res_info = data.get("result") or data.get("content") or ""
+                                yield StreamChunk(
+                                    chunk_type="function_result",
+                                    text=str(res_info),
+                                    metadata=data
+                                )
+
                             elif chunk_type == "final":
                                 yield StreamChunk(
                                     chunk_type="final",
                                     text="",
-                                    metadata=data.get("data")
+                                    metadata=data.get("data") or data
                                 )
+
                             elif chunk_type == "error":
                                 error_msg = data.get("content") or str(data)
                                 yield StreamChunk(chunk_type="error", text=error_msg)
+
                         except json.JSONDecodeError:
                             continue
 
     def clear_history(self) -> bool:
-        """Clears server-side conversation history for this user."""
+        """Clears server-side conversation history for this session."""
         url = f"{self.base_url}/clear-history"
         payload = {
             "username": self.username,
