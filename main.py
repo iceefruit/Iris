@@ -12,6 +12,7 @@ from core.scheduler import scheduler
 from vision import VisionEngine
 from voice import VoiceEngine
 from tools.clipboard import GetActiveSelectionTool
+from ui import IrisUIApp, extract_concise_spoken_summary
 
 console = Console()
 
@@ -37,6 +38,17 @@ def initialize_agent() -> IrisAgent:
 
 
 def main():
+    agent = initialize_agent()
+    vision_engine = VisionEngine()
+    voice_engine = VoiceEngine()
+
+    # Check if UI mode requested via command-line arguments
+    if "--ui" in sys.argv or "-ui" in sys.argv or "--gui" in sys.argv:
+        console.print("[bold cyan]✨ Launching Iris Desktop HUD & Wavy Voice Overlay...[/bold cyan]")
+        console.print(f"[dim]Press [bold yellow]{config.ui_hotkey}[/bold yellow] at any time to toggle the top-right chat window.[/dim]")
+        ui_app = IrisUIApp(agent=agent, voice_engine=voice_engine, vision_engine=vision_engine)
+        sys.exit(ui_app.start(show_chat=True, start_wake_word=config.voice_enabled))
+
     # Start global panic killswitch and task scheduler listeners
     killswitch.start()
     scheduler.start()
@@ -48,6 +60,7 @@ def main():
             f"[dim]User:[/dim]     {config.username} ({config.userid})\n"
             f"[dim]Memory:[/dim]   Persistent SQLite Vault at [cyan]{config.memory_db_path}[/cyan]\n"
             f"[dim]Safety:[/dim]   Panic Killswitch: [bold red]{config.killswitch_hotkey}[/bold red] (Press anytime to freeze)\n"
+            f"[dim]HUD Hotkey:[/dim] [bold cyan]{config.ui_hotkey}[/bold cyan] (Toggle top-right floating chat overlay)\n"
             f"[dim]Commands:[/dim]\n"
             f"  [yellow]'/goal <task>'[/yellow]          - Execute autonomous multi-step ReAct goal loop\n"
             f"  [yellow]'/act <query>'[/yellow]          - Visually inspect screen & execute single action\n"
@@ -62,7 +75,7 @@ def main():
             f"  [yellow]'/tasks'[/yellow]                - View background scheduled tasks\n"
             f"  [yellow]'clear'[/yellow]                 - Reset conversation session\n"
             f"  [yellow]'exit'[/yellow]                  - Quit assistant",
-            title="✨ Iris Core Logic Engine (All 6 Pillars Active)",
+            title="✨ Iris Core Logic Engine (HUD & Overlay Ready)",
             border_style="cyan",
         )
     )
@@ -372,8 +385,9 @@ def main():
                 # Text-To-Speech Playback if requested
                 if should_speak and spoken_response_acc:
                     full_text = "".join(spoken_response_acc)
-                    clean_spoken = "\n".join([line for line in full_text.splitlines() if not line.startswith("```")])
-                    voice_engine.speak_async(clean_spoken)
+                    clean_spoken = extract_concise_spoken_summary(full_text)
+                    if clean_spoken:
+                        voice_engine.speak_async(clean_spoken)
 
             except KeyboardInterrupt:
                 console.print("\n[dim]Interrupted. Type 'exit' to quit.[/dim]")

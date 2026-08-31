@@ -125,6 +125,40 @@ class AppConfig(BaseSettings):
         default="int8",
         validation_alias="IRIS_VOICE_STT_COMPUTE"
     )
+    voice_concise_mode: bool = Field(
+        default=True,
+        validation_alias="IRIS_VOICE_CONCISE_MODE"
+    )
+
+    # Desktop HUD & UI Overlay Configuration
+    ui_enabled: bool = Field(
+        default=True,
+        validation_alias="IRIS_UI_ENABLED"
+    )
+    ui_hotkey: str = Field(
+        default="<ctrl>+<shift>+t",
+        validation_alias="IRIS_UI_HOTKEY"
+    )
+    ui_width: int = Field(
+        default=390,
+        validation_alias="IRIS_UI_WIDTH"
+    )
+    ui_height: int = Field(
+        default=540,
+        validation_alias="IRIS_UI_HEIGHT"
+    )
+    ui_top_margin: int = Field(
+        default=36,
+        validation_alias="IRIS_UI_TOP_MARGIN"
+    )
+    ui_right_margin: int = Field(
+        default=28,
+        validation_alias="IRIS_UI_RIGHT_MARGIN"
+    )
+    ui_theme_accent: str = Field(
+        default="#38bdf8",
+        validation_alias="IRIS_UI_THEME_ACCENT"
+    )
 
     def get_prompt(self, key: str, default: str = "") -> str:
         """Loads a specific prompt template by key from prompts.json."""

@@ -33,6 +33,7 @@ class VoiceEngine:
     def start_wake_word_loop(
         self,
         on_command_callback: Callable[[str], None],
+        on_state_change: Optional[Callable[[str, Optional[str]], None]] = None,
         trigger_word: str = "iris",
     ) -> bool:
         """Starts continuous wake-word listening with barge-in interruption in the background."""
@@ -42,6 +43,7 @@ class VoiceEngine:
         self._listener = ContinuousVoiceListener(
             transcriber=self.stt,
             on_speech_detected=on_command_callback,
+            on_state_change=on_state_change,
             require_wake_word=True,
             trigger_word=trigger_word,
             tts_player=self.tts,

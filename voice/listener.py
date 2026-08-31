@@ -41,6 +41,7 @@ class ContinuousVoiceListener:
         self,
         transcriber: Optional[FasterWhisperTranscriber] = None,
         on_speech_detected: Optional[Callable[[str], None]] = None,
+        on_state_change: Optional[Callable[[str, Optional[str]], None]] = None,
         samplerate: int = 16000,
         energy_threshold: float = 0.02,
         silence_duration: float = 0.8,
@@ -50,6 +51,7 @@ class ContinuousVoiceListener:
     ):
         self.transcriber = transcriber or FasterWhisperTranscriber()
         self.on_speech_detected = on_speech_detected
+        self.on_state_change = on_state_change
         self.samplerate = samplerate
         self.energy_threshold = energy_threshold
         self.silence_duration = silence_duration
@@ -108,6 +110,11 @@ class ContinuousVoiceListener:
                         if not is_speaking:
                             is_speaking = True
                             audio_buffer = []
+                            if self.on_state_change:
+                                try:
+                                    self.on_state_change("listening", "Iris is listening...")
+                                except Exception:
+                                    pass
                         audio_buffer.append(audio_flat)
                         silence_start = time.time()
                     elif is_speaking:
@@ -119,21 +126,44 @@ class ContinuousVoiceListener:
                             audio_buffer = []
 
                             if len(full_audio) > self.samplerate * 0.4:  # At least 0.4s of speech
+                                if self.on_state_change:
+                                    try:
+                                        self.on_state_change("thinking", "Transcribing...")
+                                    except Exception:
+                                        pass
                                 raw_text = self.transcriber.transcribe_audio_array(full_audio)
                                 if raw_text:
                                     if self.require_wake_word:
                                         clean_query = extract_wake_word_query(raw_text, self.trigger_word)
-                                        if clean_query and self.on_speech_detected:
-                                            try:
-                                                self.on_speech_detected(clean_query)
-                                            except Exception as err:
-                                                print(f"[Continuous Listener Callback Error]: {err}")
+                                        if clean_query:
+                                            if self.on_state_change:
+                                                try:
+                                                    self.on_state_change("thinking", "Iris is thinking...")
+                                                except Exception:
+                                                    pass
+                                            if self.on_speech_detected:
+                                                try:
+                                                    self.on_speech_detected(clean_query)
+                                                except Exception as err:
+                                                    print(f"[Continuous Listener Callback Error]: {err}")
+                                        else:
+                                            if self.on_state_change:
+                                                try:
+                                                    self.on_state_change("idle", None)
+                                                except Exception:
+                                                    pass
                                     else:
                                         if self.on_speech_detected:
                                             try:
                                                 self.on_speech_detected(raw_text)
                                             except Exception as err:
                                                 print(f"[Continuous Listener Callback Error]: {err}")
+                                else:
+                                    if self.on_state_change:
+                                        try:
+                                            self.on_state_change("idle", None)
+                                        except Exception:
+                                            pass
 
                     time.sleep(0.01)
 
