@@ -1,10 +1,12 @@
-"""Discord Message Formatter for Iris Autonomous Responses."""
-
 from typing import Any, Dict, List
+from integrations.discord.emojis import emoji_registry, DEFAULT_CUSTOM_EMOJIS
 
 
 class DiscordMessageFormatter:
-    """Formats Iris execution events and LLM outputs for Discord."""
+    """Formats Iris execution events and LLM outputs for Discord with custom aesthetic emojis."""
+
+    def __init__(self):
+        self.emojis = emoji_registry
 
     @staticmethod
     def chunk_message(text: str, max_length: int = 1900) -> List[str]:
@@ -45,38 +47,51 @@ class DiscordMessageFormatter:
 
         return chunks
 
-    @staticmethod
-    def format_intent_badge(category: str, query: str) -> str:
+    def format_intent_badge(self, category: str, query: str) -> str:
+        arrow_anim = self.emojis.get("8r_arrow", "<a:8R_arrow:1280406522190495884>")
+        white_arrow = self.emojis.get("white_arrow", "<:white_arrow:1527313231868329994>")
+        flower = self.emojis.get("ea_flower", "<:ea_flower:1541018931823644732>")
+        heart = self.emojis.get("heart_3_", "<a:heart_3_:1285903837340762185>")
+        bow = self.emojis.get("white_bow", "<:white_bow:1527313288235581470>")
+        star = self.emojis.get("02_black_star", "<:02_Black_Star:1541019032566767616>")
+        sparkle = self.emojis.get("emoji_024", "<:emoji_024:1541018951926947850>")
+
         icons = {
-            "GOAL": "🚀 **[Autonomous Goal Mode]**",
-            "ACTION": "⚡ **[Desktop Action Mode]**",
-            "VISION": "📸 **[Screen Vision Mode]**",
-            "MEMORY": "🧠 **[Knowledge Vault Mode]**",
-            "CHAT": "💬 **[Conversational Mode]**",
+            "GOAL": f"{arrow_anim} {star} **[Autonomous Goal Mode]**",
+            "ACTION": f"{white_arrow} {sparkle} **[Desktop Action Mode]**",
+            "VISION": f"{flower} **[Screen Vision Mode]**",
+            "MEMORY": f"{heart} **[Knowledge Vault Mode]**",
+            "CHAT": f"{bow} **[Conversational Mode]**",
         }
-        icon = icons.get(category, "✨ **[Iris Processing]**")
+        icon = icons.get(category, f"{bow} **[Iris Processing]**")
         return f"{icon} *\"{query}\"*"
 
-    @staticmethod
-    def format_action_call(tool: str, arguments: Dict[str, Any]) -> str:
+    def format_action_call(self, tool: str, arguments: Dict[str, Any]) -> str:
+        white_arrow = self.emojis.get("white_arrow", "<:white_arrow:1527313231868329994>")
         args_str = ", ".join(f"{k}={v}" for k, v in arguments.items())
-        return f"⚡ `Executing Action:` **{tool}**({args_str})"
+        return f"{white_arrow} `Executing Action:` **{tool}**({args_str})"
 
-    @staticmethod
-    def format_action_result(tool: str, result: str, success: bool = True) -> str:
-        status_icon = "✔" if success else "❌"
+    def format_action_result(self, tool: str, result: str, success: bool = True) -> str:
+        sparkle = self.emojis.get("emoji_024", "<:emoji_024:1541018951926947850>")
+        sad = self.emojis.get("kittysad", "<:KittySad:1268275441580376074>")
+        status_icon = sparkle if success else sad
         # Truncate long result outputs
         short_res = result[:300] + ("..." if len(result) > 300 else "")
         return f"{status_icon} `{tool} Result:` {short_res}"
 
-    @staticmethod
-    def format_vision_context(app: str, title: str) -> str:
-        return f"📸 `Active App:` **{app}** | *{title[:50]}*"
+    def format_vision_context(self, app: str, title: str) -> str:
+        flower = self.emojis.get("ea_flower", "<:ea_flower:1541018931823644732>")
+        return f"{flower} `Active App:` **{app}** | *{title[:50]}*"
 
-    @staticmethod
-    def format_goal_completed(summary: str) -> str:
-        return f"🎉 **Goal Completed:** {summary}"
+    def format_goal_completed(self, summary: str) -> str:
+        heart = self.emojis.get("heart_3_", "<a:heart_3_:1285903837340762185>")
+        crown = self.emojis.get("crown_white_neon", "<:crown_white_neon:1273239112631058524>")
+        return f"{heart} {crown} **Goal Completed:** {summary}"
 
-    @staticmethod
-    def format_goal_aborted(reason: str) -> str:
-        return f"🛑 **Goal Aborted:** {reason}"
+    def format_goal_aborted(self, reason: str) -> str:
+        sad = self.emojis.get("kittysad", "<:KittySad:1268275441580376074>")
+        return f"{sad} **Goal Aborted:** {reason}"
+
+    def format_ai_content(self, text: str) -> str:
+        """Applies dynamic emoji replacements to AI-generated text."""
+        return self.emojis.format_text(text)

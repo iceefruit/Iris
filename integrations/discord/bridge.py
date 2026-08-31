@@ -175,11 +175,15 @@ class DiscordIrisBridge:
                 final_message_parts.append("\n".join(status_updates))
 
             if full_reply:
-                final_message_parts.append(full_reply)
+                # Apply custom aesthetic emoji replacements to the text
+                styled_reply = self.formatter.format_ai_content(full_reply)
+                final_message_parts.append(styled_reply)
 
             final_text = "\n\n".join(final_message_parts).strip()
             if not final_text:
-                final_text = "✔ *Task processed.*"
+                bow = self.formatter.emojis.get("white_bow", "<:white_bow:1527313288235581470>")
+                sparkle = self.formatter.emojis.get("emoji_024", "<:emoji_024:1541018951926947850>")
+                final_text = f"{bow} {sparkle} *Task processed successfully.*"
 
             # Split into chunks if exceeds Discord length
             chunks = self.formatter.chunk_message(final_text)
@@ -191,19 +195,26 @@ class DiscordIrisBridge:
 
         except Exception as e:
             logger.error(f"[DiscordBridge] Execution error: {e}", exc_info=True)
+            sad = self.formatter.emojis.get("kittysad", "<:KittySad:1268275441580376074>")
             await self.rest_client.send_message(
                 channel_id,
-                f"🛑 **Iris Error:** Failed to execute command: `{str(e)}`",
+                f"{sad} **Iris Error:** Failed to execute command: `{str(e)}`",
                 reply_to_id=message_id,
             )
 
     async def start(self):
-        """Starts Discord Userbot Gateway in background."""
+        """Starts Discord Userbot Gateway and fetches server emojis in background."""
         if not self.token:
             logger.warning("[DiscordBridge] No DISCORD_USER_TOKEN provided in config or .env.")
             return False
 
+        # Launch gateway event consumer
         self._bg_task = asyncio.create_task(self.gateway.run())
+
+        # Dynamically discover and register accessible server emojis
+        from integrations.discord.emojis import emoji_registry
+        asyncio.create_task(emoji_registry.fetch_user_guild_emojis(self.token))
+
         return True
 
     def stop(self):

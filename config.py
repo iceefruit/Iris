@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from pydantic import Field
+from pydantic import Field, AliasChoices
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,7 +54,10 @@ class AppConfig(BaseSettings):
     n8n_webhook_url: str = Field(default="", validation_alias="N8N_WEBHOOK_URL")
 
     # Discord Userbot Bridge Configuration
-    discord_user_token: str = Field(default="", validation_alias="DISCORD_USER_TOKEN")
+    discord_user_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("DISCORD_USER_TOKEN", "USER_TOKEN", "ERIXA_USER_TOKEN")
+    )
     discord_trigger_word: str = Field(default="iris", validation_alias="DISCORD_TRIGGER_WORD")
     discord_allowed_users: str = Field(default="", validation_alias="DISCORD_ALLOWED_USERS")
     discord_autostart: bool = Field(default=False, validation_alias="DISCORD_AUTOSTART")
