@@ -67,8 +67,20 @@ def test_acoustic_echo_filter():
     assert is_acoustic_echo("Can you open Spotify?", last_spoken) is False
 
 
+from voice.stt import apply_phonetic_corrections
+
+
+def test_phonetic_corrections():
+    assert apply_phonetic_corrections("open this cord") == "open Discord"
+    assert apply_phonetic_corrections("play music on spot if i") == "play music on Spotify"
+    assert apply_phonetic_corrections("check see pee you usage") == "check CPU usage"
+    assert apply_phonetic_corrections("open vs code") == "open VS Code"
+
+
 if __name__ == "__main__":
     test_edge_tts_synthesis()
     test_voice_engine_initialization()
     test_wake_word_extraction()
+    test_acoustic_echo_filter()
+    test_phonetic_corrections()
     print("\nAll Voice Engine Tests Passed Successfully!")

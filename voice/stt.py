@@ -16,6 +16,35 @@ except ImportError:
     WhisperModel = None
 
 
+WHISPER_PROMPT_BIAS = (
+    "Iris, Discord, Spotify, Chrome, YouTube, Google, Windows, PowerShell, "
+    "VS Code, Notepad, Calculator, open, close, play, mute, search, CPU, RAM, "
+    "battery, volume, what time is it, screen."
+)
+
+PHONETIC_CORRECTIONS = [
+    (r"(?i)\b(?:this\s+cord|dis\s+chord|the\s+score|this\s+board|dis\s*cord|discourse|disco)\b", "Discord"),
+    (r"(?i)\b(?:spot\s+if\s+i|spot\s+a\s+fight|spot\s+if\s+why|spot\s*ify)\b", "Spotify"),
+    (r"(?i)\b(?:vs\s+code|visual\s+studio\s+code)\b", "VS Code"),
+    (r"(?i)\b(?:not\s+pad|note\s+pad)\b", "Notepad"),
+    (r"(?i)\b(?:see\s+pee\s+you|c\s+p\s+u)\b", "CPU"),
+    (r"(?i)\b(?:you\s+tube)\b", "YouTube"),
+    (r"(?i)\b(?:power\s+shell)\b", "PowerShell"),
+    (r"(?i)\b(?:fire\s+fox)\b", "Firefox"),
+]
+
+
+def apply_phonetic_corrections(text: str) -> str:
+    """Corrects common Whisper phonetic mishearings for desktop apps and commands."""
+    import re
+    if not text:
+        return ""
+    result = text
+    for pattern, replacement in PHONETIC_CORRECTIONS:
+        result = re.sub(pattern, replacement, result)
+    return result
+
+
 class FasterWhisperTranscriber:
     """Efficient local speech recognizer with lazy loading."""
 
@@ -56,20 +85,30 @@ class FasterWhisperTranscriber:
         return self._model
 
     def transcribe_audio_array(self, audio_data: np.ndarray) -> str:
-        """Transcribes raw 16kHz float32 audio array with robust CPU fallback."""
+        """Transcribes raw 16kHz float32 audio array with normalization and keyword biasing."""
         if audio_data.ndim > 1:
             audio_data = np.mean(audio_data, axis=1)
+
+        # Audio Gain Normalization: Scales quiet external mic audio to optimal Whisper amplitude
+        peak = np.max(np.abs(audio_data))
+        if peak > 0.001:
+            audio_data = (audio_data / peak) * 0.9
 
         try:
             segments, _ = self.model.transcribe(
                 audio_data,
                 beam_size=5,
+                initial_prompt=WHISPER_PROMPT_BIAS,
                 vad_filter=True,
-                vad_parameters=dict(min_silence_duration_ms=500),
+                vad_parameters=dict(min_silence_duration_ms=400),
             )
-            return " ".join([seg.text.strip() for seg in segments]).strip()
+            raw_text = " ".join([seg.text.strip() for seg in segments]).strip()
+            corrected = apply_phonetic_corrections(raw_text)
+            if corrected:
+                print(f"[Whisper STT Heard]: '{corrected}'")
+            return corrected
         except Exception as err:
-            # If CUDA runtime error (e.g. missing cublas64_12.dll), recreate model on CPU and retry
+            # If CUDA runtime error, recreate model on CPU and retry
             print(f"[STT Warning]: Whisper execution failed ({err}), retrying on CPU...")
             try:
                 self._model = WhisperModel(
@@ -80,10 +119,15 @@ class FasterWhisperTranscriber:
                 segments, _ = self._model.transcribe(
                     audio_data,
                     beam_size=5,
+                    initial_prompt=WHISPER_PROMPT_BIAS,
                     vad_filter=True,
-                    vad_parameters=dict(min_silence_duration_ms=500),
+                    vad_parameters=dict(min_silence_duration_ms=400),
                 )
-                return " ".join([seg.text.strip() for seg in segments]).strip()
+                raw_text = " ".join([seg.text.strip() for seg in segments]).strip()
+                corrected = apply_phonetic_corrections(raw_text)
+                if corrected:
+                    print(f"[Whisper STT Heard]: '{corrected}'")
+                return corrected
             except Exception as cpu_err:
                 print(f"[STT Error]: CPU transcription also failed: {cpu_err}")
                 return ""
