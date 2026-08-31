@@ -12,6 +12,7 @@ Welcome to the **Iris** codebase. This document defines engineering standards, c
   - Upload endpoint: `POST /upload-files`
   - Image endpoint: `POST /image`
   - History clear: `POST /clear-history`
+- **JSON Prompt Config:** System prompts and personality configurations are stored cleanly in `prompts.json`.
 - **Low-Latency Streaming:** Streams real-time `content` and `thinking` tokens via Server-Sent Events (SSE).
 - **Strict Typing:** All new functions and classes must use Python type hints (`typing` / `dataclasses` / `pydantic`).
 
@@ -20,6 +21,7 @@ Welcome to the **Iris** codebase. This document defines engineering standards, c
 ## 🗂️ 2. Directory Layout & Layer Responsibilities
 ```
 Iris/
+├── prompts.json       # System prompt definitions and assistant behavior
 ├── config.py          # Single source of truth for runtime config (Pydantic BaseSettings)
 ├── core/
 │   ├── protocols.py   # Interface contracts (MemoryProtocol, LLMClientProtocol, StreamChunk)

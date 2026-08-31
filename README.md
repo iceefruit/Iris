@@ -4,6 +4,8 @@ A lightweight, extensible, and modular local desktop AI assistant powered by the
 
 ## 🚀 Features
 - **Native Miko API Integration:** Direct support for `qwen-max`, `qwen-coder`, `deepseek-default`, and other Miko services.
+- **JSON Prompt Config:** Easily customize your assistant's behavior and personality in [`prompts.json`](prompts.json).
+- **Autonomous Web Search:** Automatically performs real-time search queries and extracts verified sources.
 - **Real-Time Streaming:** Low-latency SSE streaming with thinking mode visualization and rich CLI formatting.
 - **Multi-Modal Ready:** Pre-wired support for file uploads (`/upload-files`), image generation (`/image`), and web search.
 - **Protocol-Driven Architecture:** Decoupled client, memory, and orchestrator layers.
@@ -20,7 +22,9 @@ A lightweight, extensible, and modular local desktop AI assistant powered by the
    copy .env.example .env
    # Edit .env and insert your MIKO_API_KEY
    ```
-3. Run:
+3. Customize Prompt (Optional):
+   Edit `prompts.json` to change how Iris responds.
+4. Run:
    ```bash
    python main.py
    ```
