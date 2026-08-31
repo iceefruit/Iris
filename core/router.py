@@ -86,13 +86,25 @@ class IntentRouter:
             )
 
         # 3. Fast-Path Pattern Matching for Multi-Step Goals
-        # Patterns like: "open X and play Y", "go to X server and tell Y", "search for X and save to Y"
+        # Patterns like: "open X and play Y", "go to X server and tell Y", "dm X on discord", "search for X and save to Y"
         goal_conjunctions = [
-            r"\b(?:open|launch|start|switch to|go to)\b.+\b(?:and|then)\b.+\b(?:play|click|search|type|find|save|write|tell|send|ping|message)\b",
+            # Multi-step sequential actions
+            r"\b(?:open|launch|start|switch to|go to|focus)\b.+\b(?:and|then)\b.+\b(?:play|click|search|type|find|save|write|tell|send|ping|message|dm|reply|respond|answer|check|read|upload|share)\b",
             r"\b(?:search|google|find)\b.+\b(?:and|then)\b.+\b(?:save|download|write|copy|open)\b",
             r"\b(?:create|make|write)\b.+\b(?:and|then)\b.+\b(?:run|execute|save|open)\b",
-            r"\b(?:go to|browse to|open|switch to)\b.+\b(?:server|channel|discord|slack|browser|chat)\b.+\b(?:and|then)?\b.+\b(?:tell|message|send|ping|write|say|post)\b",
-            r"\b(?:send|post|type|message|tell|ping)\b.+\b(?:in|on|to)\b.+\b(?:discord|server|channel|chat)\b",
+            # Server, channel, chat navigation & messaging
+            r"\b(?:go to|browse to|open|switch to|in|at|inside)\b.+\b(?:server|channel|discord|slack|browser|chat)\b.+\b(?:and|then)?\b.+\b(?:tell|message|send|ping|write|say|post|dm|reply|respond|answer|check|read)\b",
+            # Discord Direct Messaging & User Pings
+            r"\b(?:dm|direct\s*message|pm|private\s*message|whisper)\s+@?[\w.-]+(?:\s+(?:on|in)\s+discord)?\b",
+            r"\b(?:ping|mention|tag)\s+@?[\w.-]+(?:\s+(?:in|on|at)\s+(?:#?[\w.-]+|discord|general|chat|server))?\s*(?:saying|that|with|to|about)?\b",
+            r"\b(?:send|post|type|message|tell|ping|reply|respond|forward)\b.+\b(?:in|on|to)\b.+\b(?:discord|server|channel|chat|#[\w.-]+|@[\w.-]+)\b",
+            # Discord Screenshot & File Uploads
+            r"\b(?:send|share|upload|post|drop|forward)\s+(?:this\s+)?(?:screen|screenshot|image|pic|file|doc|pdf|log)\s+(?:to|in|on)\s+(?:discord|#?[\w.-]+|@?[\w.-]+)\b",
+            # Discord Message Reading & Inspection
+            r"\b(?:check|read|see|inspect|view|summarize|find)\s+(?:my\s+|any\s+|the\s+)?(?:new\s+|recent\s+|unread\s+)?(?:discord\s+(?:messages?|chats?|dms?|notifications?|pings?)|messages?\s+(?:on|in)\s+discord)\b",
+            r"\bwhat\s+did\s+@?[\w.-]+\s+(?:say|write|post|send|tell)\s+(?:on|in)\s+discord\b",
+            # Discord Inline Replies
+            r"\b(?:reply|respond|answer)\s+(?:to\s+)?@?[\w.-]+(?:\s+(?:on|in)\s+discord)?\s*(?:saying|that|with|:)?\b",
         ]
         for pattern in goal_conjunctions:
             if re.search(pattern, lower):

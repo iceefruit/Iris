@@ -120,8 +120,8 @@ class AutonomousGoalRunner:
                 "active_app": win_ctx.process_name,
             }
 
-            # 4. REASON: Call Miko
-            sys_prompt = f"{config.system_prompt}\n\n{self.tools.format_system_prompt_tools()}"
+            # 4. REASON: Call Miko with goal_prompt cognitive instructions
+            sys_prompt = f"{config.system_prompt}\n\n{config.goal_prompt}\n\n{self.tools.format_system_prompt_tools()}"
             messages = [{"role": "user", "content": prompt}]
 
             response_accumulator = []

@@ -17,7 +17,12 @@ from tools.app_launcher import LaunchAppTool
 from tools.browser import OpenUrlTool
 from tools.system import SystemStatusTool
 from tools.file_ops import FileOperationTool
-from tools.clipboard import GetClipboardTool, SetClipboardTool, GetActiveSelectionTool
+from tools.clipboard import (
+    GetClipboardTool,
+    SetClipboardTool,
+    GetActiveSelectionTool,
+    SetClipboardImageTool,
+)
 from tools.image_gen import GenerateImageTool
 from tools.n8n_tool import TriggerN8nTool
 from tools.web_scraper import ReadWebpageTool
@@ -27,7 +32,13 @@ from tools.spotify import SpotifyTool
 from tools.audio_control import AudioControlTool
 from tools.window_manager import WindowManagerTool
 from tools.playwright_browser import PlaywrightBrowserTool
-from tools.discord_tool import SendDiscordFileTool, SendDiscordMessageTool
+from tools.discord_tool import (
+    SendDiscordFileTool,
+    SendDiscordMessageTool,
+    ReadDiscordMessagesTool,
+    SearchDiscordChannelsTool,
+    SendDiscordDmTool,
+)
 
 
 class ToolRegistry:
@@ -178,6 +189,7 @@ def create_default_registry() -> ToolRegistry:
     registry.register(GetClipboardTool())
     registry.register(SetClipboardTool())
     registry.register(GetActiveSelectionTool())
+    registry.register(SetClipboardImageTool())
     # Multimodal & Integrations Tools
     registry.register(GenerateImageTool())
     registry.register(TriggerN8nTool())
@@ -194,6 +206,9 @@ def create_default_registry() -> ToolRegistry:
     registry.register(PlaywrightBrowserTool())
     registry.register(SendDiscordFileTool())
     registry.register(SendDiscordMessageTool())
+    registry.register(ReadDiscordMessagesTool())
+    registry.register(SearchDiscordChannelsTool())
+    registry.register(SendDiscordDmTool())
     return registry
 
 

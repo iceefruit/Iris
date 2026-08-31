@@ -103,3 +103,73 @@ class GetActiveSelectionTool(BaseTool):
                 except Exception:
                     pass
             return ToolResult(success=False, output="", error=f"Failed to capture selection: {str(e)}")
+
+
+def set_clipboard_image(image_path: str) -> bool:
+    """Copies an image file to the Windows system clipboard for Ctrl+V pasting."""
+    import io
+    import os
+    import subprocess
+    from pathlib import Path
+
+    if not os.path.exists(image_path):
+        return False
+
+    # Try PIL BMP/DIB win32clipboard method
+    try:
+        from PIL import Image
+        image = Image.open(image_path)
+        output = io.BytesIO()
+        image.convert("RGB").save(output, "BMP")
+        data = output.getvalue()[14:]  # Strip 14-byte BMP file header for CF_DIB
+        output.close()
+
+        import win32clipboard
+        win32clipboard.OpenClipboard()
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+        win32clipboard.CloseClipboard()
+        return True
+    except Exception:
+        pass
+
+    # Fallback to PowerShell System.Windows.Forms.Clipboard
+    try:
+        norm_path = Path(image_path).resolve()
+        ps_cmd = (
+            f"Add-Type -AssemblyName System.Windows.Forms; "
+            f"[System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('{norm_path}'))"
+        )
+        res = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, timeout=5)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+class SetClipboardImageTool(BaseTool):
+    """Tool to copy an image file into system clipboard for direct pasting."""
+
+    name = "set_clipboard_image"
+    description = (
+        "Copies a local image or screenshot file into the system clipboard. "
+        "Allows pasting the image with Ctrl+V into Discord, Slack, browsers, or image editors."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "image_path": {
+                "type": "string",
+                "description": "Absolute or relative path to the image file to copy into clipboard.",
+            },
+        },
+        "required": ["image_path"],
+    }
+
+    def execute(self, image_path: str, **kwargs) -> ToolResult:
+        if not image_path:
+            return ToolResult(success=False, output="", error="image_path is required.")
+        success = set_clipboard_image(image_path)
+        if success:
+            return ToolResult(success=True, output=f"Copied image '{image_path}' to system clipboard.")
+        return ToolResult(success=False, output="", error=f"Failed to copy image '{image_path}' to clipboard.")
+

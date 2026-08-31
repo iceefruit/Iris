@@ -10,7 +10,7 @@ class DiscordMessageFormatter:
 
     @staticmethod
     def chunk_message(text: str, max_length: int = 1900) -> List[str]:
-        """Splits long text into Discord-safe message chunks."""
+        """Splits long text into Discord-safe chunks while preserving markdown codeblock tags."""
         if len(text) <= max_length:
             return [text]
 
@@ -18,26 +18,38 @@ class DiscordMessageFormatter:
         lines = text.split("\n")
         current_chunk = []
         current_len = 0
+        in_codeblock = False
+        codeblock_lang = ""
 
         for line in lines:
-            # If a single line itself exceeds max_length, slice it
+            if line.strip().startswith("```"):
+                if not in_codeblock:
+                    in_codeblock = True
+                    codeblock_lang = line.strip()[3:].strip()
+                else:
+                    in_codeblock = False
+                    codeblock_lang = ""
+
             while len(line) > max_length:
                 part = line[:max_length]
                 line = line[max_length:]
                 if current_chunk:
+                    if in_codeblock:
+                        current_chunk.append("```")
                     chunks.append("\n".join(current_chunk))
-                    current_chunk = []
-                    current_len = 0
+                    current_chunk = [f"```{codeblock_lang}"] if in_codeblock else []
+                    current_len = len(current_chunk[0]) if current_chunk else 0
                 chunks.append(part)
 
-            if not line:
+            if not line and not current_chunk:
                 continue
 
             if current_len + len(line) + 1 > max_length:
-                if current_chunk:
-                    chunks.append("\n".join(current_chunk))
-                current_chunk = [line]
-                current_len = len(line)
+                if in_codeblock:
+                    current_chunk.append("```")
+                chunks.append("\n".join(current_chunk))
+                current_chunk = [f"```{codeblock_lang}", line] if in_codeblock else [line]
+                current_len = sum(len(l) for l in current_chunk) + len(current_chunk)
             else:
                 current_chunk.append(line)
                 current_len += len(line) + 1
@@ -46,6 +58,24 @@ class DiscordMessageFormatter:
             chunks.append("\n".join(current_chunk))
 
         return chunks
+
+    @staticmethod
+    def format_user_mentions(text: str, user_mapping: Dict[str, str]) -> str:
+        """Replaces @username in outgoing text with Discord mention <@user_id>."""
+        import re
+        for username, user_id in user_mapping.items():
+            pattern = rf"@\b{re.escape(username.lstrip('@'))}\b"
+            text = re.sub(pattern, f"<@{user_id}>", text, flags=re.IGNORECASE)
+        return text
+
+    @staticmethod
+    def parse_mentions_to_readable(text: str, user_cache: Dict[str, str]) -> str:
+        """Converts <@123456789> into @Username for cleaner LLM ingestion."""
+        import re
+        def _replace_id(m: re.Match) -> str:
+            uid = m.group(1)
+            return f"@{user_cache.get(uid, f'User_{uid}')}"
+        return re.sub(r"<@!?([0-9]+)>", _replace_id, text)
 
     def format_intent_badge(self, category: str, query: str) -> str:
         arrow_anim = self.emojis.get("8r_arrow", "<a:8R_arrow:1280406522190495884>")
