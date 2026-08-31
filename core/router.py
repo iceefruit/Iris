@@ -86,12 +86,13 @@ class IntentRouter:
             )
 
         # 3. Fast-Path Pattern Matching for Multi-Step Goals
-        # Patterns like: "open X and play Y", "search for X and save to Y", "create a file X and write Y"
+        # Patterns like: "open X and play Y", "go to X server and tell Y", "search for X and save to Y"
         goal_conjunctions = [
-            r"\b(?:open|launch|start)\b.+\b(?:and|then)\b.+\b(?:play|click|search|type|find|save|write)\b",
+            r"\b(?:open|launch|start|switch to|go to)\b.+\b(?:and|then)\b.+\b(?:play|click|search|type|find|save|write|tell|send|ping|message)\b",
             r"\b(?:search|google|find)\b.+\b(?:and|then)\b.+\b(?:save|download|write|copy|open)\b",
             r"\b(?:create|make|write)\b.+\b(?:and|then)\b.+\b(?:run|execute|save|open)\b",
-            r"\b(?:go to|browse to)\b.+\b(?:and|then)\b.+\b(?:click|fill|submit|search)\b",
+            r"\b(?:go to|browse to|open|switch to)\b.+\b(?:server|channel|discord|slack|browser|chat)\b.+\b(?:and|then)?\b.+\b(?:tell|message|send|ping|write|say|post)\b",
+            r"\b(?:send|post|type|message|tell|ping)\b.+\b(?:in|on|to)\b.+\b(?:discord|server|channel|chat)\b",
         ]
         for pattern in goal_conjunctions:
             if re.search(pattern, lower):
