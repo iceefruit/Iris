@@ -34,7 +34,13 @@ def initialize_agent() -> IrisAgent:
         timeout=config.timeout_seconds,
     )
     memory = PersistentMemoryStore(db_path=config.memory_db_path)
-    return IrisAgent(client=client, memory=memory, killswitch=killswitch)
+    agent = IrisAgent(client=client, memory=memory, killswitch=killswitch)
+    # Reset old server-side session memory and local conversation history on each new startup
+    try:
+        agent.clear()
+    except Exception:
+        pass
+    return agent
 
 
 def main():

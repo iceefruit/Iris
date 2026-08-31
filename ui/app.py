@@ -64,6 +64,12 @@ class IrisUIApp:
         else:
             self.agent = agent
 
+        # Clear old server-side and local conversation session on fresh startup
+        try:
+            self.agent.clear()
+        except Exception:
+            pass
+
         self.voice = voice_engine or VoiceEngine()
         self.vision = vision_engine or VisionEngine()
 

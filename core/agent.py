@@ -154,6 +154,9 @@ class IrisAgent:
                         text=str(res),
                         metadata=res.to_dict(),
                     )
+                    # Settle the action in local memory so the assistant does not dwell on it
+                    if res.success:
+                        self.memory.add_message(role="assistant", content=f"Action completed: {tool_name} successfully executed.")
 
         except Exception as e:
             error_chunk = StreamChunk(
