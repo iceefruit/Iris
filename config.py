@@ -121,6 +121,10 @@ class AppConfig(BaseSettings):
         default="base.en",
         validation_alias="IRIS_VOICE_STT_MODEL"
     )
+    voice_stt_device: str = Field(
+        default="cpu",
+        validation_alias="IRIS_VOICE_STT_DEVICE"
+    )
     voice_stt_compute: str = Field(
         default="int8",
         validation_alias="IRIS_VOICE_STT_COMPUTE"

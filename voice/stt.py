@@ -22,10 +22,12 @@ class FasterWhisperTranscriber:
     def __init__(
         self,
         model_size: Optional[str] = None,
+        device: Optional[str] = None,
         compute_type: Optional[str] = None,
         samplerate: int = 16000,
     ):
         self.model_size = model_size or config.voice_stt_model
+        self.device = device or getattr(config, "voice_stt_device", "cpu")
         self.compute_type = compute_type or config.voice_stt_compute
         self.samplerate = samplerate
         self._model: Optional[Any] = None
@@ -39,12 +41,13 @@ class FasterWhisperTranscriber:
             try:
                 self._model = WhisperModel(
                     self.model_size,
-                    device="auto",
+                    device=self.device,
                     compute_type=self.compute_type,
                 )
             except Exception as e:
                 # Fallback to CPU if CUDA initialization or DLLs fail
                 print(f"[STT Info]: Falling back to CPU model: {e}")
+                self.device = "cpu"
                 self._model = WhisperModel(
                     self.model_size,
                     device="cpu",
