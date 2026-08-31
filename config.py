@@ -1,4 +1,4 @@
-﻿"""Configuration loader using Pydantic Settings and JSON prompt templates."""
+"""Configuration loader using Pydantic Settings and JSON prompt templates."""
 
 import json
 from pathlib import Path
@@ -45,23 +45,114 @@ class AppConfig(BaseSettings):
         validation_alias="MAX_HISTORY_MESSAGES"
     )
     timeout_seconds: float = Field(default=60.0, validation_alias="REQUEST_TIMEOUT_SECONDS")
+    memory_db_path: str = Field(default=".iris_memory.db", validation_alias="IRIS_MEMORY_DB_PATH")
+    max_requests_per_second: float = Field(default=2.0, validation_alias="IRIS_MAX_REQUESTS_PER_SECOND")
+    max_inline_system_prompt_chars: int = Field(default=32000, validation_alias="IRIS_MAX_INLINE_SYSTEM_PROMPT_CHARS")
+    max_inline_user_chars: int = Field(default=16000, validation_alias="IRIS_MAX_INLINE_USER_CHARS")
 
     # Optional n8n Webhook
     n8n_webhook_url: str = Field(default="", validation_alias="N8N_WEBHOOK_URL")
 
-    @property
-    def system_prompt(self) -> str:
-        """Loads the system prompt from the JSON prompt file or falls back to default."""
+    # Vision Engine Configuration
+    vision_service: str = Field(
+        default="qwen-max",
+        validation_alias="MIKO_VISION_SERVICE"
+    )
+    vision_cache_dir: str = Field(
+        default=".iris_cache",
+        validation_alias="IRIS_VISION_CACHE_DIR"
+    )
+    vision_compress_quality: int = Field(
+        default=85,
+        validation_alias="IRIS_VISION_COMPRESS_QUALITY"
+    )
+    vision_max_dimension: int = Field(
+        default=1920,
+        validation_alias="IRIS_VISION_MAX_DIMENSION"
+    )
+    vision_grid_overlay: bool = Field(
+        default=False,
+        validation_alias="IRIS_VISION_GRID_OVERLAY"
+    )
+
+    # Desktop Actuator Configuration
+    actuator_enabled: bool = Field(
+        default=True,
+        validation_alias="IRIS_ACTUATOR_ENABLED"
+    )
+    actuator_typing_delay: float = Field(
+        default=0.02,
+        validation_alias="IRIS_ACTUATOR_TYPING_DELAY"
+    )
+    actuator_mouse_duration: float = Field(
+        default=0.2,
+        validation_alias="IRIS_ACTUATOR_MOUSE_DURATION"
+    )
+
+    # Global Panic Killswitch
+    killswitch_hotkey: str = Field(
+        default="<ctrl>+<shift>+k",
+        validation_alias="IRIS_KILLSWITCH_HOTKEY"
+    )
+
+    # Voice Engine Configuration
+    voice_enabled: bool = Field(
+        default=False,
+        validation_alias="IRIS_VOICE_ENABLED"
+    )
+    voice_tts_voice: str = Field(
+        default="en-US-AvaMultilingualNeural",
+        validation_alias="IRIS_VOICE_TTS_VOICE"
+    )
+    voice_tts_rate: str = Field(
+        default="+0%",
+        validation_alias="IRIS_VOICE_TTS_RATE"
+    )
+    voice_stt_model: str = Field(
+        default="base.en",
+        validation_alias="IRIS_VOICE_STT_MODEL"
+    )
+    voice_stt_compute: str = Field(
+        default="int8",
+        validation_alias="IRIS_VOICE_STT_COMPUTE"
+    )
+
+    def get_prompt(self, key: str, default: str = "") -> str:
+        """Loads a specific prompt template by key from prompts.json."""
         prompt_path = Path(self.prompt_file)
         if prompt_path.exists():
             try:
                 with open(prompt_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if isinstance(data, dict) and "system_prompt" in data:
-                        return data["system_prompt"]
+                    if isinstance(data, dict) and key in data:
+                        return data[key]
             except Exception:
                 pass
-        return "You are Iris, a smart and helpful local desktop AI assistant."
+        return default
+
+    @property
+    def system_prompt(self) -> str:
+        return self.get_prompt("system_prompt", "You are Iris, a smart and helpful local desktop AI assistant.")
+
+    @property
+    def goal_prompt(self) -> str:
+        return self.get_prompt("goal_prompt", "You are Iris operating in Autonomous ReAct Goal Mode.")
+
+    @property
+    def actuator_prompt(self) -> str:
+        return self.get_prompt("actuator_prompt", "You are Iris operating in Single Desktop Actuator Mode.")
+
+    @property
+    def vision_prompt(self) -> str:
+        return self.get_prompt("vision_prompt", "You are Iris operating in Screen Vision & UI Inspection Mode.")
+
+    @property
+    def router_prompt(self) -> str:
+        return self.get_prompt("router_prompt", "You are the Iris Fast Intent Classifier.")
+
+    @property
+    def memory_prompt(self) -> str:
+        return self.get_prompt("memory_prompt", "You are the Iris Memory Extraction Engine.")
 
 
 # Global singleton instance

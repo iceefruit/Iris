@@ -1,9 +1,10 @@
-﻿"""Low-latency streaming client for Miko API (https://api-miko.yokoya.space)."""
-
 import json
+import threading
+import time
 import httpx
 from typing import Generator, List, Dict, Any, Optional
 from core.protocols import LLMClientProtocol, StreamChunk
+from config import config
 
 
 class MikoClient(LLMClientProtocol):
@@ -15,6 +16,7 @@ class MikoClient(LLMClientProtocol):
         username: str = "iris_user",
         userid: str = "iris_local_1",
         timeout: float = 60.0,
+        max_requests_per_second: Optional[float] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -22,10 +24,24 @@ class MikoClient(LLMClientProtocol):
         self.username = username
         self.userid = userid
         self.timeout = timeout
+        self.max_rps = max_requests_per_second or getattr(config, "max_requests_per_second", 2.0)
+        self._min_interval = 1.0 / max(0.1, self.max_rps)
+        self._last_request_time = 0.0
+        self._rate_lock = threading.Lock()
         self._headers = {
             "X-API-Key": self.api_key,
             "Content-Type": "application/json",
         }
+
+    def _throttle(self) -> None:
+        """Enforces client-side rate limiting so requests do not exceed max RPS."""
+        with self._rate_lock:
+            now = time.time()
+            elapsed = now - self._last_request_time
+            if elapsed < self._min_interval:
+                sleep_needed = self._min_interval - elapsed
+                time.sleep(sleep_needed)
+            self._last_request_time = time.time()
 
     def stream_chat(
         self,
@@ -37,6 +53,7 @@ class MikoClient(LLMClientProtocol):
         files: Optional[List[str]] = None,
     ) -> Generator[StreamChunk, None, None]:
         """Streams real-time events from Miko /chat endpoint."""
+        self._throttle()
         url = f"{self.base_url}/chat"
         payload: Dict[str, Any] = {
             "service": service or self.default_service,
@@ -116,6 +133,7 @@ class MikoClient(LLMClientProtocol):
 
     def clear_history(self) -> bool:
         """Clears server-side conversation history for this session."""
+        self._throttle()
         url = f"{self.base_url}/clear-history"
         payload = {
             "username": self.username,
@@ -130,6 +148,7 @@ class MikoClient(LLMClientProtocol):
 
     def upload_files(self, file_paths: List[str]) -> List[str]:
         """Uploads local files to Miko and returns temporary server paths."""
+        self._throttle()
         url = f"{self.base_url}/upload-files"
         headers = {"X-API-Key": self.api_key}
 
@@ -156,6 +175,7 @@ class MikoClient(LLMClientProtocol):
         self, prompt: str, size: str = "16:9", model: str = "qwen-image-2"
     ) -> List[Dict[str, Any]]:
         """Generates images using Miko /image endpoint."""
+        self._throttle()
         url = f"{self.base_url}/image"
         payload = {
             "prompt": prompt,
@@ -171,3 +191,4 @@ class MikoClient(LLMClientProtocol):
                 return data.get("images", [])
             else:
                 raise RuntimeError(f"Image generation failed [{res.status_code}]: {res.text}")
+

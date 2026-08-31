@@ -1,6 +1,13 @@
-﻿.env
+.env
 __pycache__/
 *.pyc
 .venv/
 venv/
 *.log
+.iris_cache/
+.iris_memory.db
+.iris_rag.db
+*.db
+*.sqlite3
+.pytest_cache/
+
