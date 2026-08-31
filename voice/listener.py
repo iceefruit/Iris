@@ -6,6 +6,7 @@ import time
 from typing import Any, Callable, Optional
 import numpy as np
 
+from config import config
 from voice.stt import FasterWhisperTranscriber
 
 try:
@@ -20,15 +21,16 @@ def extract_wake_word_query(raw_text: str, trigger_word: str = "iris") -> Option
         return None
 
     clean = raw_text.strip()
-    # Matches "hey iris", "ok iris", "okay iris", "hi iris", "iris" at start or word boundary
-    pattern = rf"\b(?:hey\s+|ok\s+|okay\s+|hi\s+)?{re.escape(trigger_word)}\b"
-    match = re.search(pattern, clean, re.IGNORECASE)
+    # Flexible pattern for wake words: "hey iris", "ok iris", "hi iris", "hello iris", "iris", "iris,"
+    # Also matches common phonetic Whisper mishearings: iris, irish, aires, airis
+    pattern = rf"(?i)\b(?:hey|ok|okay|hi|hello|yo)?[\s,:-]*(?:{re.escape(trigger_word)}|irish|aires|airis)\b[\s,:\.\?!-]*"
+    match = re.search(pattern, clean)
     if not match:
         return None
 
-    # Strip wake word
-    query = re.sub(pattern, "", clean, flags=re.IGNORECASE).strip()
-    # Clean leading punctuation and double spaces
+    # Strip wake word match
+    query = clean[match.end():].strip()
+    # Clean leading and trailing punctuation
     query = re.sub(r"^[,\.:;\!\-\s]+", "", query).strip()
     query = re.sub(r"\s+", " ", query).strip()
     return query if query else "Hello Iris"
@@ -71,7 +73,7 @@ class ContinuousVoiceListener:
         on_speech_detected: Optional[Callable[[str], None]] = None,
         on_state_change: Optional[Callable[[str, Optional[str]], None]] = None,
         samplerate: int = 16000,
-        energy_threshold: float = 0.03,
+        energy_threshold: Optional[float] = None,
         silence_duration: float = 0.8,
         require_wake_word: bool = True,
         trigger_word: str = "iris",
@@ -81,7 +83,7 @@ class ContinuousVoiceListener:
         self.on_speech_detected = on_speech_detected
         self.on_state_change = on_state_change
         self.samplerate = samplerate
-        self.energy_threshold = energy_threshold
+        self.energy_threshold = energy_threshold if energy_threshold is not None else getattr(config, "voice_energy_threshold", 0.008)
         self.silence_duration = silence_duration
         self.require_wake_word = require_wake_word
         self.trigger_word = trigger_word

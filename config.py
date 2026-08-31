@@ -133,6 +133,10 @@ class AppConfig(BaseSettings):
         default=True,
         validation_alias="IRIS_VOICE_CONCISE_MODE"
     )
+    voice_energy_threshold: float = Field(
+        default=0.008,
+        validation_alias="IRIS_VOICE_ENERGY_THRESHOLD"
+    )
 
     # Desktop HUD & UI Overlay Configuration
     ui_enabled: bool = Field(

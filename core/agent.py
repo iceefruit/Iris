@@ -63,8 +63,12 @@ class IrisAgent:
         # Use vision service if files are present and no explicit service passed
         effective_service = service or (config.vision_service if server_files else config.service)
 
-        # System prompt with User Knowledge Vault + Tool Instructions
-        sys_prompt = config.system_prompt
+        # System prompt with Real-Time Clock Context + User Knowledge Vault + Tool Instructions
+        import datetime
+        now = datetime.datetime.now()
+        time_context = f"Current Local System Time: {now.strftime('%A, %B %d, %Y, %I:%M:%S %p')} (Timezone: {now.astimezone().tzname() or 'Local'})"
+        sys_prompt = f"{time_context}\n\n{config.system_prompt}"
+
         if hasattr(self.memory, "format_vault_prompt"):
             vault_text = self.memory.format_vault_prompt()
             if vault_text:
