@@ -1,10 +1,12 @@
 ﻿# Iris - Local Desktop AI Assistant
 
-A lightweight, extensible, and modular local desktop AI assistant powered by the Miko API.
+A lightweight, extensible, and modular local desktop AI assistant powered by the [Miko API](https://api-miko.yokoya.space/docs.md).
 
 ## 🚀 Features
-- **Streaming Responses:** Low-latency SSE text generation with rich CLI formatting.
-- **Protocol-driven Architecture:** Decoupled client, memory, and orchestrator layers.
+- **Native Miko API Integration:** Direct support for `qwen-max`, `qwen-coder`, `deepseek-default`, and other Miko services.
+- **Real-Time Streaming:** Low-latency SSE streaming with thinking mode visualization and rich CLI formatting.
+- **Multi-Modal Ready:** Pre-wired support for file uploads (`/upload-files`), image generation (`/image`), and web search.
+- **Protocol-Driven Architecture:** Decoupled client, memory, and orchestrator layers.
 - **n8n Automation Ready:** Pre-built webhook dispatcher for zero-code external service triggers.
 - **AI Agent Friendly:** Complete instructions and developer contract in [AGENTS.md](AGENTS.md).
 

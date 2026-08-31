@@ -1,43 +1,63 @@
-﻿"""Low-latency streaming client for OpenAI-compatible APIs (Miko Yokoya)."""
+﻿"""Low-latency client for the Miko API (https://api-miko.yokoya.space)."""
 
 import json
 import httpx
-from typing import Generator, List, Dict, Optional
-from core.protocols import LLMClientProtocol
+from typing import Generator, List, Dict, Any, Optional
+from core.protocols import LLMClientProtocol, StreamChunk
 
 
 class MikoClient(LLMClientProtocol):
-    def __init__(self, base_url: str, api_key: str, default_model: str, timeout: float = 60.0):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        default_service: str = "qwen-max",
+        username: str = "iris_user",
+        userid: str = "iris_local_1",
+        timeout: float = 60.0,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        self.default_model = default_model
+        self.default_service = default_service
+        self.username = username
+        self.userid = userid
         self.timeout = timeout
         self._headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "X-API-Key": self.api_key,
             "Content-Type": "application/json",
         }
 
     def stream_chat(
         self,
         messages: List[Dict[str, str]],
-        model: Optional[str] = None,
-        temperature: Optional[float] = 0.7,
-    ) -> Generator[str, None, None]:
-        """Streams text chunks from the OpenAI-compatible completions endpoint."""
-        url = f"{self.base_url}/chat/completions"
-        payload = {
-            "model": model or self.default_model,
+        service: Optional[str] = None,
+        search: bool = False,
+        thinking: bool = False,
+        system_prompt: Optional[str] = None,
+        files: Optional[List[str]] = None,
+    ) -> Generator[StreamChunk, None, None]:
+        """Streams response chunks from Miko /chat endpoint."""
+        url = f"{self.base_url}/chat"
+        payload: Dict[str, Any] = {
+            "service": service or self.default_service,
             "messages": messages,
-            "temperature": temperature,
+            "username": self.username,
+            "userid": self.userid,
+            "search": search,
+            "thinking": thinking,
             "stream": True,
         }
+        if system_prompt:
+            payload["system_prompt"] = system_prompt
+        if files:
+            payload["files"] = files
 
         with httpx.Client(timeout=self.timeout) as client:
             with client.stream("POST", url, headers=self._headers, json=payload) as response:
                 if response.status_code != 200:
-                    error_text = response.read().decode("utf-8", errors="replace")
+                    error_body = response.read().decode("utf-8", errors="replace")
                     raise RuntimeError(
-                        f"API Request Failed [{response.status_code}]: {error_text}"
+                        f"Miko API Error [{response.status_code}]: {error_body}"
                     )
 
                 for line in response.iter_lines():
@@ -52,13 +72,82 @@ class MikoClient(LLMClientProtocol):
 
                         try:
                             data = json.loads(data_str)
-                            choices = data.get("choices", [])
-                            if not choices:
-                                continue
-
-                            delta = choices[0].get("delta", {})
-                            content_chunk = delta.get("content")
-                            if content_chunk:
-                                yield content_chunk
+                            chunk_type = data.get("type", "content")
+                            
+                            if chunk_type == "content":
+                                content = data.get("content", "")
+                                if content:
+                                    yield StreamChunk(chunk_type="content", text=content)
+                            elif chunk_type == "thinking":
+                                reasoning = data.get("content", "")
+                                if reasoning:
+                                    yield StreamChunk(chunk_type="thinking", text=reasoning)
+                            elif chunk_type == "final":
+                                yield StreamChunk(
+                                    chunk_type="final",
+                                    text="",
+                                    metadata=data.get("data")
+                                )
+                            elif chunk_type == "error":
+                                error_msg = data.get("content") or str(data)
+                                yield StreamChunk(chunk_type="error", text=error_msg)
                         except json.JSONDecodeError:
                             continue
+
+    def clear_history(self) -> bool:
+        """Clears server-side conversation history for this user."""
+        url = f"{self.base_url}/clear-history"
+        payload = {
+            "username": self.username,
+            "userid": self.userid,
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(url, headers=self._headers, json=payload)
+                return res.status_code == 200
+        except Exception:
+            return False
+
+    def upload_files(self, file_paths: List[str]) -> List[str]:
+        """Uploads local files to Miko and returns temporary server paths."""
+        url = f"{self.base_url}/upload-files"
+        headers = {"X-API-Key": self.api_key}
+
+        files_to_send = []
+        file_handles = []
+        try:
+            for path in file_paths:
+                f = open(path, "rb")
+                file_handles.append(f)
+                files_to_send.append(("files", f))
+
+            with httpx.Client(timeout=self.timeout) as client:
+                res = client.post(url, headers=headers, files=files_to_send)
+                if res.status_code == 200:
+                    data = res.json()
+                    return data.get("files", [])
+                else:
+                    raise RuntimeError(f"File upload failed [{res.status_code}]: {res.text}")
+        finally:
+            for f in file_handles:
+                f.close()
+
+    def generate_image(
+        self, prompt: str, size: str = "16:9", model: str = "qwen-image-2"
+    ) -> List[Dict[str, Any]]:
+        """Generates images using Miko /image endpoint."""
+        url = f"{self.base_url}/image"
+        payload = {
+            "prompt": prompt,
+            "model": model,
+            "size": size,
+            "username": self.username,
+            "userid": self.userid,
+        }
+        with httpx.Client(timeout=self.timeout) as client:
+            res = client.post(url, headers=self._headers, json=payload)
+            if res.status_code == 200:
+                data = res.json()
+                return data.get("images", [])
+            else:
+                raise RuntimeError(f"Image generation failed [{res.status_code}]: {res.text}")

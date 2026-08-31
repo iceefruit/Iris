@@ -1,6 +1,5 @@
 ﻿"""Configuration loader using Pydantic Settings."""
 
-import os
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,16 +11,28 @@ class AppConfig(BaseSettings):
         extra="ignore"
     )
 
-    # API Configuration
+    # Miko API Configuration
     api_key: str = Field(default="", validation_alias="MIKO_API_KEY")
     base_url: str = Field(
-        default="https://api-miko.yokoya.space/v1",
+        default="https://api-miko.yokoya.space",
         validation_alias="MIKO_BASE_URL"
     )
-    model: str = Field(
-        default="gemini-2.5-flash",
-        validation_alias="MIKO_MODEL"
+    service: str = Field(
+        default="qwen-max",
+        validation_alias="MIKO_SERVICE"
     )
+    username: str = Field(
+        default="iris_user",
+        validation_alias="MIKO_USERNAME"
+    )
+    userid: str = Field(
+        default="iris_local_1",
+        validation_alias="MIKO_USERID"
+    )
+
+    # Model Features
+    search: bool = Field(default=False, validation_alias="MIKO_SEARCH")
+    thinking: bool = Field(default=False, validation_alias="MIKO_THINKING")
 
     # Behavior
     system_prompt: str = Field(
@@ -32,7 +43,6 @@ class AppConfig(BaseSettings):
         default=20,
         validation_alias="MAX_HISTORY_MESSAGES"
     )
-    temperature: float = Field(default=0.7, validation_alias="TEMPERATURE")
     timeout_seconds: float = Field(default=60.0, validation_alias="REQUEST_TIMEOUT_SECONDS")
 
     # Optional n8n Webhook

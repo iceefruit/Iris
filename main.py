@@ -23,12 +23,14 @@ def initialize_agent() -> IrisAgent:
     client = MikoClient(
         base_url=config.base_url,
         api_key=config.api_key,
-        default_model=config.model,
-        timeout=config.timeout_seconds
+        default_service=config.service,
+        username=config.username,
+        userid=config.userid,
+        timeout=config.timeout_seconds,
     )
     memory = ConversationMemory(
         system_prompt=config.system_prompt,
-        max_messages=config.max_history_messages
+        max_messages=config.max_history_messages,
     )
     return IrisAgent(client=client, memory=memory)
 
@@ -38,10 +40,12 @@ def main():
         Panel.fit(
             f"[bold magenta]Iris Core Assistant[/bold magenta]\n"
             f"[dim]Endpoint:[/dim] {config.base_url}\n"
-            f"[dim]Model:[/dim]    {config.model}\n"
-            f"[dim]Commands:[/dim] Type [yellow]'exit'[/yellow] to quit, [yellow]'clear'[/yellow] to reset context.",
-            title="✨ Iris Initialized",
-            border_style="cyan"
+            f"[dim]Service:[/dim]  {config.service}\n"
+            f"[dim]User:[/dim]     {config.username} ({config.userid})\n"
+            f"[dim]Features:[/dim] Search={config.search} | Thinking={config.thinking}\n"
+            f"[dim]Commands:[/dim] [yellow]'clear'[/yellow] to reset session, [yellow]'exit'[/yellow] to quit.",
+            title="✨ Iris Initialized (Miko API)",
+            border_style="cyan",
         )
     )
 
@@ -58,13 +62,26 @@ def main():
                 break
 
             if user_input.lower() == "clear":
-                agent.memory.clear()
-                console.print("[yellow]Context history cleared.[/yellow]")
+                agent.clear()
+                console.print("[yellow]Local context and server-side history cleared.[/yellow]")
                 continue
 
             console.print("[bold cyan]Iris > [/bold cyan]", end="")
+            in_thinking = False
             for chunk in agent.ask(user_input):
-                console.print(chunk, end="", style="white")
+                if chunk.chunk_type == "thinking":
+                    if not in_thinking:
+                        console.print("\n[dim italic]Thinking: ", end="")
+                        in_thinking = True
+                    console.print(chunk.text, end="", style="dim italic")
+                elif chunk.chunk_type == "content":
+                    if in_thinking:
+                        console.print("[/dim italic]\n")
+                        in_thinking = False
+                    console.print(chunk.text, end="", style="white")
+                elif chunk.chunk_type == "error":
+                    console.print(chunk.text, style="bold red")
+
             console.print()
 
         except KeyboardInterrupt:

@@ -7,7 +7,7 @@ from core.protocols import Message, MemoryProtocol
 class ConversationMemory(MemoryProtocol):
     def __init__(self, system_prompt: str, max_messages: int = 20):
         self.system_prompt = system_prompt
-        self.max_messages = max(2, max_messages)  # Ensure at least 1 roundtrip
+        self.max_messages = max(2, max_messages)
         self._history: List[Message] = []
 
     def add_message(self, role: str, content: str) -> None:
@@ -15,16 +15,13 @@ class ConversationMemory(MemoryProtocol):
         self._trim()
 
     def _trim(self) -> None:
-        """Keeps recent messages within the sliding window limit."""
+        """Keeps recent messages within sliding window limit."""
         if len(self._history) > self.max_messages:
-            # Preserve recent conversation without truncating mid-turn
             self._history = self._history[-self.max_messages:]
 
     def get_context(self) -> List[Dict[str, str]]:
-        """Compiles system prompt and active message history."""
-        context = [{"role": "system", "content": self.system_prompt}]
-        context.extend([msg.to_dict() for msg in self._history])
-        return context
+        """Returns message list for API consumption."""
+        return [msg.to_dict() for msg in self._history]
 
     def clear(self) -> None:
         self._history.clear()
