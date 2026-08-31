@@ -1,5 +1,6 @@
 """Response formatting and Voice/Text extraction utilities for Iris UI."""
 
+import json
 import re
 from typing import List
 
@@ -9,7 +10,7 @@ def clean_markdown_for_speech(text: str) -> str:
     if not text:
         return ""
 
-    # 1. Remove code blocks ```...```
+    # 1. Remove action blocks ```action ... ``` and code blocks ```...```
     cleaned = re.sub(r"```[\s\S]*?```", "", text)
 
     # 2. Remove inline code `...`
@@ -54,10 +55,44 @@ def clean_markdown_for_speech(text: str) -> str:
     return cleaned
 
 
+def extract_action_spoken_summary(raw_text: str) -> str:
+    """If the output is purely an action block without text, generates a clean spoken confirmation."""
+    if not raw_text:
+        return ""
+
+    action_match = re.search(r"```action\s*(\{[\s\S]*?\})\s*```", raw_text)
+    if action_match:
+        try:
+            data = json.loads(action_match.group(1))
+            tool = data.get("tool", "")
+            args = data.get("arguments", {})
+            if tool == "launch_application":
+                app = args.get("app_name", "the application")
+                return f"Opening {app}."
+            elif tool == "spotify_control":
+                action = args.get("action", "")
+                track = args.get("track_or_playlist", "")
+                if track:
+                    return f"Playing {track} on Spotify."
+                return f"Spotify {action}."
+            elif tool == "open_browser_url":
+                return f"Opening {args.get('url', 'the webpage')} in your browser."
+            elif tool == "click":
+                return "Clicking element."
+            elif tool == "complete_goal":
+                return args.get("summary", "Task completed.")
+        except Exception:
+            pass
+    return ""
+
+
 def extract_concise_spoken_summary(text: str, max_sentences: int = 2) -> str:
     """Extracts a short, compact, resourceful spoken summary (1-3 sentences) suitable for voice TTS."""
     cleaned = clean_markdown_for_speech(text)
     if not cleaned:
+        action_summary = extract_action_spoken_summary(text)
+        if action_summary:
+            return action_summary
         return ""
 
     # Split into sentences
@@ -65,6 +100,9 @@ def extract_concise_spoken_summary(text: str, max_sentences: int = 2) -> str:
     selected = [s.strip() for s in sentences if s.strip() and len(s.strip()) > 3]
 
     if not selected:
+        action_summary = extract_action_spoken_summary(text)
+        if action_summary:
+            return action_summary
         return cleaned[:150]
 
     # Pick first 1-2 most informative sentences

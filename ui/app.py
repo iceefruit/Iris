@@ -166,6 +166,12 @@ class IrisUIApp:
                     if chunk.chunk_type == "content" and chunk.text:
                         full_response += chunk.text
                         self.signals.chunk_received.emit(chunk.text)
+                    elif chunk.chunk_type == "function_call":
+                        action_msg = f"\n⚡ *{chunk.text}*...\n"
+                        self.signals.chunk_received.emit(action_msg)
+                    elif chunk.chunk_type == "function_result":
+                        res_msg = f"✔ *{chunk.text}*\n"
+                        self.signals.chunk_received.emit(res_msg)
                     elif chunk.chunk_type == "error":
                         full_response += f"\n{chunk.text}"
                         self.signals.chunk_received.emit(chunk.text)
