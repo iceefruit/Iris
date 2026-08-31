@@ -34,8 +34,36 @@ def extract_wake_word_query(raw_text: str, trigger_word: str = "iris") -> Option
     return query if query else "Hello Iris"
 
 
+def is_acoustic_echo(candidate: str, last_spoken: str) -> bool:
+    """Detects if transcribed candidate text is an acoustic feedback echo of Iris's recent speech."""
+    if not candidate or not last_spoken:
+        return False
+
+    def normalize(s: str) -> str:
+        return re.sub(r"[^\w\s]", "", s.lower()).strip()
+
+    c_norm = normalize(candidate)
+    s_norm = normalize(last_spoken)
+
+    if not c_norm or not s_norm:
+        return False
+
+    # Exact or substring match
+    if c_norm == s_norm or c_norm in s_norm or (len(c_norm) > 10 and s_norm in c_norm):
+        return True
+
+    # Word overlap match (>70% words match recent assistant output)
+    c_words = set(c_norm.split())
+    s_words = set(s_norm.split())
+    if not c_words:
+        return False
+
+    overlap = len(c_words.intersection(s_words)) / len(c_words)
+    return overlap >= 0.70
+
+
 class ContinuousVoiceListener:
-    """Non-blocking background voice activity listener with wake-word detection and barge-in interruption."""
+    """Non-blocking background voice activity listener with wake-word detection, multi-turn follow-up, and AEC."""
 
     def __init__(
         self,
@@ -43,7 +71,7 @@ class ContinuousVoiceListener:
         on_speech_detected: Optional[Callable[[str], None]] = None,
         on_state_change: Optional[Callable[[str, Optional[str]], None]] = None,
         samplerate: int = 16000,
-        energy_threshold: float = 0.02,
+        energy_threshold: float = 0.03,
         silence_duration: float = 0.8,
         require_wake_word: bool = True,
         trigger_word: str = "iris",
@@ -58,15 +86,21 @@ class ContinuousVoiceListener:
         self.require_wake_word = require_wake_word
         self.trigger_word = trigger_word
         self.tts_player = tts_player
+        self.last_spoken_text: str = ""
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._is_listening = False
         self._follow_up_expiry = 0.0
         self._in_follow_up_state = False
+        self._tts_last_active_time = 0.0
 
     @property
     def is_listening(self) -> bool:
         return self._is_listening
+
+    def set_last_spoken_text(self, text: str) -> None:
+        """Stores the recent assistant speech to filter out acoustic echoes."""
+        self.last_spoken_text = text or ""
 
     def activate_follow_up(self, duration_seconds: float = 7.0) -> None:
         """Enables multi-turn conversational follow-up mode without repeating the wake word."""
@@ -126,10 +160,21 @@ class ContinuousVoiceListener:
                     audio_flat = data.flatten()
                     rms = np.sqrt(np.mean(audio_flat**2))
 
-                    # 1. Barge-In Interruption: Stop active TTS when user starts speaking
-                    if self.tts_player and getattr(self.tts_player, "is_speaking", False):
-                        if rms > self.energy_threshold * 1.8:
-                            self.tts_player.stop()
+                    # 1. Hardware Echo Suppression: Mute mic recording while Iris is speaking out loud
+                    is_tts_active = bool(self.tts_player and getattr(self.tts_player, "is_speaking", False))
+                    if is_tts_active:
+                        self._tts_last_active_time = now
+                        audio_buffer = []
+                        is_speaking = False
+                        time.sleep(0.02)
+                        continue
+
+                    # Post-TTS speaker reverberation cooldown (0.5s grace period)
+                    if now - self._tts_last_active_time < 0.5:
+                        audio_buffer = []
+                        is_speaking = False
+                        time.sleep(0.02)
+                        continue
 
                     # 2. Voice Activity Detection
                     if rms > self.energy_threshold:
@@ -160,6 +205,12 @@ class ContinuousVoiceListener:
                                         pass
                                 raw_text = self.transcriber.transcribe_audio_array(full_audio)
                                 if raw_text:
+                                    # 3. Acoustic Echo Cancellation: Discard any transcribed text matching Iris's own voice
+                                    if is_acoustic_echo(raw_text, self.last_spoken_text):
+                                        audio_buffer = []
+                                        is_speaking = False
+                                        continue
+
                                     in_follow_up = self._in_follow_up_state or (time.time() < self._follow_up_expiry)
 
                                     if self.require_wake_word and not in_follow_up:

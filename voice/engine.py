@@ -19,11 +19,15 @@ class VoiceEngine:
         return self._listener is not None and self._listener.is_listening
 
     def speak(self, text: str, block: bool = True) -> bool:
-        """Speaks text using edge-tts."""
+        """Speaks text using edge-tts and registers speech for echo cancellation."""
+        if self._listener:
+            self._listener.set_last_spoken_text(text)
         return self.tts.speak(text, block=block)
 
     def speak_async(self, text: str):
         """Speaks text in non-blocking background thread."""
+        if self._listener:
+            self._listener.set_last_spoken_text(text)
         return self.tts.speak_async(text)
 
     def listen(self, duration_seconds: float = 5.0) -> str:

@@ -29,7 +29,7 @@ def test_voice_engine_initialization():
     print(f"    VoiceEngine initialized with STT model: {engine.stt.model_size}, TTS voice: {engine.tts.voice}")
 
 
-from voice.listener import extract_wake_word_query
+from voice.listener import extract_wake_word_query, is_acoustic_echo
 
 
 def test_wake_word_extraction():
@@ -50,6 +50,21 @@ def test_wake_word_extraction():
     q4 = extract_wake_word_query("Random chatter between friends", "iris")
     assert q4 is None
     print("    Wake-word extraction passed!")
+
+
+def test_acoustic_echo_filter():
+    last_spoken = "The current time is 7:35 PM and your CPU usage is 24 percent."
+    
+    # Substring echo
+    assert is_acoustic_echo("time is 7:35 PM", last_spoken) is True
+    assert is_acoustic_echo("your CPU usage is 24 percent", last_spoken) is True
+    
+    # Exact echo
+    assert is_acoustic_echo(last_spoken, last_spoken) is True
+    
+    # Real follow up from user
+    assert is_acoustic_echo("What about my RAM?", last_spoken) is False
+    assert is_acoustic_echo("Can you open Spotify?", last_spoken) is False
 
 
 if __name__ == "__main__":
