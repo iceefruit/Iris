@@ -116,7 +116,40 @@ async def test_search_channels_and_resolve_user():
     assert user is not None
     assert user["user_id"] == "u1"
     assert user["mention"] == "<@u1>"
+
+    # Test smart channel resolver given server name 'gum'
+    resolved = await client.resolve_channel(query="gum")
+    assert resolved is not None
+    assert resolved["channel_name"] == "#general"
+    assert resolved["channel_id"] == "c1"
+    assert resolved["guild_name"] == "GUM Server"
+
+    # Test compound query 'gum dev-chat'
+    resolved_dev = await client.resolve_channel(query="gum dev-chat")
+    assert resolved_dev is not None
+    assert resolved_dev["channel_name"] == "#dev-chat"
+    assert resolved_dev["channel_id"] == "c2"
+
     await client.close()
+
+
+@pytest.mark.anyio
+async def test_read_discord_messages_resolves_server():
+    client = DiscordRestClient(token="valid_token")
+    client.fetch_user_guilds = AsyncMock(return_value=[{"id": "g1", "name": "GUM"}])
+    client.fetch_guild_channels = AsyncMock(
+        return_value=[{"id": "c1", "name": "general", "type": 0, "topic": ""}]
+    )
+    client.get_messages = AsyncMock(
+        return_value=[{"id": "m1", "author": {"username": "cat"}, "content": "hello", "timestamp": "2026-08-31"}]
+    )
+
+    tool = ReadDiscordMessagesTool(rest_client=client)
+    with patch("config.config.discord_user_token", "valid_token"):
+        res = tool.execute(target="gum")
+        assert res.success is True
+        assert "Messages in #general (GUM)" in res.output
+        assert "cat: hello" in res.output
 
 
 # =====================================================================
@@ -160,11 +193,15 @@ def test_send_discord_file_missing_file():
 
 
 def test_read_discord_messages_no_token():
-    with patch("config.config.discord_user_token", ""):
+    with patch("config.config.discord_user_token", ""), \
+         patch("pyautogui.hotkey"), \
+         patch("pyautogui.write"), \
+         patch("pyautogui.press"), \
+         patch("tools.window_manager.WindowManagerTool.execute", return_value=MagicMock(success=True)):
         tool = ReadDiscordMessagesTool()
         res = tool.execute(channel_id="12345")
-        assert res.success is False
-        assert "No DISCORD_USER_TOKEN" in res.error
+        assert res.success is True
+        assert "Navigated to" in res.output
 
 
 def test_set_clipboard_image_tool():

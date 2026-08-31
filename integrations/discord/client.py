@@ -188,6 +188,100 @@ class DiscordRestClient:
                         })
         return results
 
+    async def resolve_channel(
+        self, query: str, guild_name: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Smart resolver that finds a channel or defaults to #general in a server.
+        
+        Handles:
+        - Numerical ID: '1280406522190495884' -> returns channel ID.
+        - Server name: 'gum' -> finds server 'gum', returns its #general or default chat channel.
+        - Compound query: 'gum general', 'gum #dev' -> finds server 'gum', returns target channel.
+        - Channel name: 'general' -> searches for #general across joined guilds.
+        """
+        raw = query.strip()
+        if raw.isdigit():
+            return {"channel_id": raw, "channel_name": f"Channel {raw}", "guild_name": "Discord"}
+
+        clean = raw.lower().replace("server", "").replace("channel", "").strip()
+        parts = clean.split()
+
+        guilds = await self.fetch_user_guilds()
+        if not guilds:
+            return None
+
+        # 1. Check if user passed guild_name explicitly or compound query (e.g. 'gum general')
+        target_guild = None
+        target_channel_name = None
+
+        if guild_name:
+            for g in guilds:
+                if guild_name.lower() in g.get("name", "").lower():
+                    target_guild = g
+                    break
+            target_channel_name = clean.lstrip("#")
+        elif len(parts) >= 2:
+            potential_guild_name = parts[0]
+            potential_chan_name = " ".join(parts[1:]).lstrip("#")
+            for g in guilds:
+                if potential_guild_name in g.get("name", "").lower():
+                    target_guild = g
+                    target_channel_name = potential_chan_name
+                    break
+
+        # 2. Check if the entire query matches a Guild Name (e.g. 'gum')
+        if not target_guild:
+            for g in guilds:
+                if clean in g.get("name", "").lower() or g.get("name", "").lower() in clean:
+                    target_guild = g
+                    target_channel_name = "general"
+                    break
+
+        # 3. If target_guild found, find target_channel_name or default general/chat
+        if target_guild:
+            g_id = target_guild.get("id")
+            g_name = target_guild.get("name", "")
+            channels = await self.fetch_guild_channels(g_id)
+            text_channels = [ch for ch in channels if ch.get("type") in (0, 5, 11, 12)]
+
+            if target_channel_name:
+                for ch in text_channels:
+                    if target_channel_name in ch.get("name", "").lower():
+                        return {
+                            "channel_id": str(ch["id"]),
+                            "channel_name": f"#{ch.get('name')}",
+                            "guild_id": str(g_id),
+                            "guild_name": g_name,
+                        }
+
+            # Prioritize standard general channel names
+            preferred_names = ["general", "main", "chat", "lounge", "discussion", "talk"]
+            for pref in preferred_names:
+                for ch in text_channels:
+                    if pref in ch.get("name", "").lower():
+                        return {
+                            "channel_id": str(ch["id"]),
+                            "channel_name": f"#{ch.get('name')}",
+                            "guild_id": str(g_id),
+                            "guild_name": g_name,
+                        }
+
+            if text_channels:
+                ch = text_channels[0]
+                return {
+                    "channel_id": str(ch["id"]),
+                    "channel_name": f"#{ch.get('name')}",
+                    "guild_id": str(g_id),
+                    "guild_name": g_name,
+                }
+
+        # 4. Search across all guilds for matching channel name
+        matches = await self.search_channels(query=clean)
+        if matches:
+            return matches[0]
+
+        return None
+
     async def fetch_relationships(self) -> List[Dict[str, Any]]:
         """Fetches user account's friends and DM relationships."""
         url = f"{self.base_url}/users/@me/relationships"
