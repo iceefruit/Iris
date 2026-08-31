@@ -95,9 +95,27 @@ def test_discord_gateway_identify_payload():
     print("    Gateway initialized successfully. (PASS)")
 
 
+from tools.discord_tool import SendDiscordFileTool
+
+
+def test_send_discord_file_tool():
+    print("\n[5] Testing SendDiscordFileTool...")
+    tool = SendDiscordFileTool()
+    assert tool.name == "send_discord_file"
+    assert "channel_id" in tool.parameters["properties"]
+    assert "file_path" in tool.parameters["properties"]
+
+    # File not found case
+    res = tool.execute(channel_id="123456", file_path="non_existent_file_xyz.txt")
+    assert res.success is False
+    assert "File not found" in res.error
+    print("    SendDiscordFileTool validation: PASS")
+
+
 if __name__ == "__main__":
     test_trigger_detection_and_query_cleaning()
     test_discord_message_formatter()
     test_emoji_replacement()
     test_discord_gateway_identify_payload()
+    test_send_discord_file_tool()
     print("\nAll Discord Userbot & Custom Emoji Unit Tests Passed Successfully!")

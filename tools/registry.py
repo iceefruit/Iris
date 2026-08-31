@@ -23,6 +23,11 @@ from tools.n8n_tool import TriggerN8nTool
 from tools.web_scraper import ReadWebpageTool
 from tools.rag_tool import IndexDirectoryTool, SearchKnowledgeBaseTool
 from tools.diagnostics_tool import DiagnoseEnvironmentTool
+from tools.spotify import SpotifyTool
+from tools.audio_control import AudioControlTool
+from tools.window_manager import WindowManagerTool
+from tools.playwright_browser import PlaywrightBrowserTool
+from tools.discord_tool import SendDiscordFileTool
 
 
 class ToolRegistry:
@@ -181,6 +186,13 @@ def create_default_registry() -> ToolRegistry:
     registry.register(IndexDirectoryTool())
     registry.register(SearchKnowledgeBaseTool())
     registry.register(DiagnoseEnvironmentTool())
+    # Media, Audio & Spotify Control Tools
+    registry.register(SpotifyTool())
+    registry.register(AudioControlTool())
+    registry.register(WindowManagerTool())
+    # Web Browser Automation & Discord File Tools
+    registry.register(PlaywrightBrowserTool())
+    registry.register(SendDiscordFileTool())
     return registry
 
 

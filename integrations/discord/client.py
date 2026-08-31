@@ -49,8 +49,15 @@ class DiscordRestClient:
         channel_id: str,
         content: str,
         reply_to_id: Optional[str] = None,
+        file_path: Optional[str] = None,
+        file_bytes: Optional[bytes] = None,
+        filename: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Sends a text message or reply to a Discord channel."""
+        """Sends a text message, reply, or file attachment to a Discord channel."""
+        import json
+        import os
+        from pathlib import Path
+
         url = f"{self.base_url}/channels/{channel_id}/messages"
         payload: Dict[str, Any] = {"content": content}
 
@@ -59,21 +66,52 @@ class DiscordRestClient:
             payload["allowed_mentions"] = {"replied_user": False}
 
         session = await self._get_session()
+
         for attempt in range(3):
             try:
-                async with session.post(url, json=payload) as resp:
-                    if resp.status in (200, 201):
-                        return await resp.json()
-                    elif resp.status == 429:
-                        data = await resp.json()
-                        retry_after = data.get("retry_after", 2.0)
-                        logger.warning(f"[DiscordRestClient] Rate limited. Retrying after {retry_after}s...")
-                        await asyncio.sleep(retry_after)
-                        continue
-                    else:
-                        err_text = await resp.text()
-                        logger.error(f"[DiscordRestClient] Send failed [{resp.status}]: {err_text}")
-                        return None
+                # Check if we are attaching a file
+                if file_path or file_bytes:
+                    data = aiohttp.FormData()
+                    data.add_field("payload_json", json.dumps(payload))
+
+                    if file_path and Path(file_path).exists():
+                        fname = filename or os.path.basename(file_path)
+                        with open(file_path, "rb") as f:
+                            raw_content = f.read()
+                        data.add_field("files[0]", raw_content, filename=fname)
+                    elif file_bytes:
+                        fname = filename or "attachment.png"
+                        data.add_field("files[0]", file_bytes, filename=fname)
+
+                    # Custom headers without Content-Type so aiohttp sets multipart/form-data boundary
+                    custom_headers = {k: v for k, v in self._headers.items() if k.lower() != "content-type"}
+                    async with session.post(url, data=data, headers=custom_headers) as resp:
+                        if resp.status in (200, 201):
+                            return await resp.json()
+                        elif resp.status == 429:
+                            resp_data = await resp.json()
+                            retry_after = resp_data.get("retry_after", 2.0)
+                            logger.warning(f"[DiscordRestClient] Rate limited. Retrying after {retry_after}s...")
+                            await asyncio.sleep(retry_after)
+                            continue
+                        else:
+                            err_text = await resp.text()
+                            logger.error(f"[DiscordRestClient] Send with attachment failed [{resp.status}]: {err_text}")
+                            return None
+                else:
+                    async with session.post(url, json=payload) as resp:
+                        if resp.status in (200, 201):
+                            return await resp.json()
+                        elif resp.status == 429:
+                            data = await resp.json()
+                            retry_after = data.get("retry_after", 2.0)
+                            logger.warning(f"[DiscordRestClient] Rate limited. Retrying after {retry_after}s...")
+                            await asyncio.sleep(retry_after)
+                            continue
+                        else:
+                            err_text = await resp.text()
+                            logger.error(f"[DiscordRestClient] Send failed [{resp.status}]: {err_text}")
+                            return None
             except Exception as e:
                 logger.error(f"[DiscordRestClient] HTTP request error: {e}")
                 await asyncio.sleep(1.0)

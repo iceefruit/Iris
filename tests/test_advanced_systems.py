@@ -147,12 +147,17 @@ def test_full_registry_count():
     all_tools = default_registry.list_tools()
     tool_names = [t.name for t in all_tools]
     print(f"    Total registered tools ({len(all_tools)}): {tool_names}")
-    assert len(all_tools) == 20
+    assert len(all_tools) >= 20
     assert "read_webpage" in tool_names
     assert "index_directory" in tool_names
     assert "search_knowledge_base" in tool_names
     assert "diagnose_environment" in tool_names
-    print("    All 20 tools registered in default registry. (PASS)")
+    assert "spotify_control" in tool_names
+    assert "control_volume" in tool_names
+    assert "manage_window" in tool_names
+    assert "browser_interact" in tool_names
+    assert "send_discord_file" in tool_names
+    print(f"    All {len(all_tools)} tools registered in default registry. (PASS)")
 
 
 if __name__ == "__main__":

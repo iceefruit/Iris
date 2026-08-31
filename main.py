@@ -56,6 +56,7 @@ def main():
             f"  [yellow]'/screen <query>'[/yellow]       - Full screen capture + active app metadata\n"
             f"  [yellow]'/remember <k=v>'[/yellow]      - Store user preference in persistent memory vault\n"
             f"  [yellow]'/facts'[/yellow]                - View stored user profile facts and preferences\n"
+            f"  [yellow]'/voice-loop'[/yellow]           - Start always-on 'Hey Iris' hands-free voice loop\n"
             f"  [yellow]'/voice'[/yellow]                - Record 5s from microphone and ask Iris (STT)\n"
             f"  [yellow]'/speak <query>'[/yellow]        - Ask Iris and speak the response out loud (TTS)\n"
             f"  [yellow]'/tasks'[/yellow]                - View background scheduled tasks\n"
@@ -104,8 +105,31 @@ def main():
                 crop_active = False
                 use_grid = False
 
+                # Voice Continuous Wake-Word Loop (/voice-loop)
+                if user_input.lower().startswith(("/voice-loop", "/listen-loop", "/wake")):
+                    if voice_engine.is_listening_loop:
+                        voice_engine.stop_wake_word_loop()
+                        console.print("[yellow]🎙️ 'Hey Iris' hands-free voice loop stopped.[/yellow]")
+                    else:
+                        def _voice_callback(clean_query: str):
+                            console.print(f"\n[bold green]🎙️ Wake-Word Heard:[/bold green] [italic]'{clean_query}'[/italic]")
+                            spoken_parts = []
+                            for ev in agent.process_input(clean_query):
+                                if ev.get("type") in ("chunk", "content"):
+                                    txt = ev.get("text", "")
+                                    if ev.get("chunk_type") == "content" or ev.get("type") == "content":
+                                        spoken_parts.append(txt)
+                            if spoken_parts:
+                                resp_txt = "".join(spoken_parts)
+                                clean_resp = "\n".join([l for l in resp_txt.splitlines() if not l.startswith("```")])
+                                voice_engine.speak_async(clean_resp)
+
+                        voice_engine.start_wake_word_loop(on_command_callback=_voice_callback)
+                        console.print("[green]🎙️ 'Hey Iris' continuous wake-word listener active! Say 'Hey Iris <command>' anytime.[/green]")
+                    continue
+
                 # Voice STT Command (/voice)
-                if user_input.lower().startswith("/voice"):
+                elif user_input.lower().startswith("/voice"):
                     console.print("[dim yellow]🎙️ Listening to microphone for 5 seconds...[/dim yellow]")
                     recorded_text = voice_engine.listen(duration_seconds=5.0)
                     if not recorded_text:

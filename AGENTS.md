@@ -37,9 +37,9 @@ Iris/
 │   ├── killswitch.py  # Global emergency abort mechanism (PyAutoGUI + hotkey)
 │   └── agent.py       # Central orchestrator loop
 ├── integrations/      # External automation dispatchers (n8n webhooks)
-├── tools/             # Action registry (20 registered tools: GUI, shell, files, scraper, RAG, etc.)
+├── tools/             # Action registry (25 registered tools: GUI, shell, Spotify, browser, window mgr, etc.)
 ├── vision/            # Screen capture (MSS), active window context, and coordinate grid grounding
-├── voice/             # Neural TTS (edge-tts) and local STT (faster-whisper) + continuous listener
+├── voice/             # Neural TTS (edge-tts) and local STT (faster-whisper) + 'Hey Iris' wake-word loop
 ├── tests/             # Unit and integration test suite
 └── main.py            # CLI runtime entrypoint
 ```
@@ -81,3 +81,4 @@ Every commit must look like it was written by an experienced human software engi
 - [x] **Phase 2 (Vision Engine):** Implement `vision/` with `mss`, Windows active application & context extraction, DPI normalization, and Miko file upload integration.
 - [x] **Phase 3 (Actuator / Tool Calling):** Implement `tools/` with standard JSON function calling schema for mouse clicks, typing, hotkeys, scrolling, drag, and PowerShell execution.
 - [x] **Phase 4 (n8n Automations & Advanced Core):** Bind `integrations/n8n.py`, multimodal image generation, persistent memory vault, local RAG knowledge base, and multi-session workspaces.
+- [x] **Phase 5 (Discord Remote Vision, Spotify/Media Suite, Playwright Web Agent & Wake-Word Engine):** Multipart Discord screenshot & file uploads, Spotify search & playback (`spotify_control`), Windows volume and window snapping, interactive Playwright browser engine, and continuous `"Hey Iris"` voice loop with barge-in TTS interruption.

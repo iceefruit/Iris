@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -123,6 +124,7 @@ class DiscordIrisBridge:
 
         response_chunks = []
         status_updates = []
+        attachment_file_path = None
 
         def _run_sync_pipeline():
             events = []
@@ -137,7 +139,12 @@ class DiscordIrisBridge:
             for ev in events:
                 ev_type = ev.get("type")
 
-                if ev_type == "intent_detected":
+                if ev_type == "vision_context":
+                    screen_p = ev.get("screenshot")
+                    if screen_p and os.path.exists(screen_p):
+                        attachment_file_path = screen_p
+
+                elif ev_type == "intent_detected":
                     cat = ev.get("category", "")
                     if cat in ("GOAL", "ACTION", "VISION"):
                         status_updates.append(self.formatter.format_intent_badge(cat, ev.get("query", "")))
@@ -148,11 +155,19 @@ class DiscordIrisBridge:
                     )
 
                 elif ev_type == "action_result":
+                    tool_n = ev.get("tool", "")
+                    res_str = ev.get("result", "")
                     status_updates.append(
                         self.formatter.format_action_result(
-                            ev.get("tool", ""), ev.get("result", ""), ev.get("success", True)
+                            tool_n, res_str, ev.get("success", True)
                         )
                     )
+                    # Check if action produced an image file (e.g. generate_image or browser screenshot)
+                    if tool_n in ("generate_image", "browser_interact", "diagnose_environment"):
+                        import re
+                        m = re.search(r"Saved (?:image|screenshot|chart) to:\s*([^\s\n\r]+)", res_str)
+                        if m and os.path.exists(m.group(1)):
+                            attachment_file_path = m.group(1)
 
                 elif ev_type == "goal_completed":
                     status_updates.append(self.formatter.format_goal_completed(ev.get("summary", "")))
@@ -189,7 +204,14 @@ class DiscordIrisBridge:
             chunks = self.formatter.chunk_message(final_text)
             for idx, ch in enumerate(chunks):
                 reply_ref = message_id if idx == 0 else None
-                await self.rest_client.send_message(channel_id, ch, reply_to_id=reply_ref)
+                # Attach file to first message chunk if available
+                f_path = attachment_file_path if idx == 0 else None
+                await self.rest_client.send_message(
+                    channel_id,
+                    ch,
+                    reply_to_id=reply_ref,
+                    file_path=f_path,
+                )
                 if len(chunks) > 1:
                     await asyncio.sleep(1.0)
 
