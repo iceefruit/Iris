@@ -27,7 +27,7 @@ from tools.spotify import SpotifyTool
 from tools.audio_control import AudioControlTool
 from tools.window_manager import WindowManagerTool
 from tools.playwright_browser import PlaywrightBrowserTool
-from tools.discord_tool import SendDiscordFileTool
+from tools.discord_tool import SendDiscordFileTool, SendDiscordMessageTool
 
 
 class ToolRegistry:
@@ -190,9 +190,10 @@ def create_default_registry() -> ToolRegistry:
     registry.register(SpotifyTool())
     registry.register(AudioControlTool())
     registry.register(WindowManagerTool())
-    # Web Browser Automation & Discord File Tools
+    # Web Browser Automation & Discord Dispatch Tools
     registry.register(PlaywrightBrowserTool())
     registry.register(SendDiscordFileTool())
+    registry.register(SendDiscordMessageTool())
     return registry
 
 
