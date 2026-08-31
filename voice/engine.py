@@ -51,6 +51,11 @@ class VoiceEngine:
         self._listener.start()
         return True
 
+    def activate_follow_up(self, duration_seconds: float = 7.0) -> None:
+        """Enables follow-up conversation mode on the continuous listener."""
+        if self._listener:
+            self._listener.activate_follow_up(duration_seconds=duration_seconds)
+
     def stop_wake_word_loop(self) -> None:
         """Stops background continuous wake-word listener."""
         if self._listener:
@@ -61,3 +66,4 @@ class VoiceEngine:
         """Stops active speech output and wake-word listener."""
         self.tts.stop()
         self.stop_wake_word_loop()
+

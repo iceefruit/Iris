@@ -124,21 +124,10 @@ class IrisUIApp:
 
     def _handle_mic_button_clicked(self) -> None:
         """Handles manual microphone trigger from the chat window."""
-        def _listen_worker():
-            try:
-                self.signals.state_changed.emit("listening", "Listening for 5s...")
-                transcription = self.voice.listen(duration_seconds=5.0)
-                if transcription and transcription.strip():
-                    self.signals.user_message_received.emit(transcription)
-                    self._process_text_query(transcription, is_voice_reply=True)
-                else:
-                    self.signals.state_changed.emit("idle", "")
-            except Exception as err:
-                print(f"[Voice Listen Error]: {err}")
-                self.signals.error_occurred.emit(f"Voice listening error: {err}")
-                self.signals.state_changed.emit("idle", "")
-
-        threading.Thread(target=_listen_worker, daemon=True).start()
+        if not self.voice.is_listening_loop:
+            self._start_voice_wake_word_loop()
+        self.voice.activate_follow_up(duration_seconds=8.0)
+        self.signals.state_changed.emit("listening", "Listening for speech...")
 
     def _handle_user_message(self, text: str) -> None:
         """Processes message submitted through the Chat HUD input."""
@@ -192,21 +181,24 @@ class IrisUIApp:
         self.chat_window.set_status(text or state, state)
 
     def _on_response_completed(self, full_text: str, is_voice: bool) -> None:
-        """Finalizes chat message and speaks concise summary if in voice mode."""
+        """Finalizes chat message and speaks concise summary with conversational follow-up."""
         self.chat_window.finish_assistant_message(full_text)
 
-        if is_voice and config.voice_enabled or is_voice:
+        if is_voice:
             spoken_summary = extract_concise_spoken_summary(full_text)
             if spoken_summary:
                 self.signals.state_changed.emit("speaking", "Iris is speaking...")
 
                 def _speak_thread():
                     self.voice.speak(spoken_summary, block=True)
-                    self.signals.state_changed.emit("idle", "")
+                    # Multi-turn conversation: remain open for follow-up turns without wake-word
+                    self.voice.activate_follow_up(duration_seconds=7.0)
+                    self.signals.state_changed.emit("listening", "Listening for follow-up...")
 
                 threading.Thread(target=_speak_thread, daemon=True).start()
             else:
-                self.signals.state_changed.emit("idle", "")
+                self.voice.activate_follow_up(duration_seconds=7.0)
+                self.signals.state_changed.emit("listening", "Listening for follow-up...")
         else:
             self.signals.state_changed.emit("idle", "")
 

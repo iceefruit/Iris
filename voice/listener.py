@@ -61,10 +61,22 @@ class ContinuousVoiceListener:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._is_listening = False
+        self._follow_up_expiry = 0.0
+        self._in_follow_up_state = False
 
     @property
     def is_listening(self) -> bool:
         return self._is_listening
+
+    def activate_follow_up(self, duration_seconds: float = 7.0) -> None:
+        """Enables multi-turn conversational follow-up mode without repeating the wake word."""
+        self._follow_up_expiry = time.time() + duration_seconds
+        self._in_follow_up_state = True
+        if self.on_state_change:
+            try:
+                self.on_state_change("listening", "Listening for follow-up...")
+            except Exception:
+                pass
 
     def start(self) -> None:
         """Starts background continuous listening daemon thread."""
@@ -80,6 +92,8 @@ class ContinuousVoiceListener:
         """Stops background listening."""
         self._stop_event.set()
         self._is_listening = False
+        self._follow_up_expiry = 0.0
+        self._in_follow_up_state = False
 
     def _listener_loop(self) -> None:
         """Audio stream consumer detecting voice triggers and handling barge-in."""
@@ -96,6 +110,18 @@ class ContinuousVoiceListener:
                 blocksize=block_size,
             ) as stream:
                 while not self._stop_event.is_set():
+                    now = time.time()
+
+                    # Check follow-up expiration
+                    if self._in_follow_up_state and now > self._follow_up_expiry:
+                        self._in_follow_up_state = False
+                        self._follow_up_expiry = 0.0
+                        if self.on_state_change and not is_speaking:
+                            try:
+                                self.on_state_change("idle", None)
+                            except Exception:
+                                pass
+
                     data, _ = stream.read(block_size)
                     audio_flat = data.flatten()
                     rms = np.sqrt(np.mean(audio_flat**2))
@@ -112,7 +138,8 @@ class ContinuousVoiceListener:
                             audio_buffer = []
                             if self.on_state_change:
                                 try:
-                                    self.on_state_change("listening", "Iris is listening...")
+                                    prompt_label = "Listening for follow-up..." if self._in_follow_up_state else "Iris is listening..."
+                                    self.on_state_change("listening", prompt_label)
                                 except Exception:
                                     pass
                         audio_buffer.append(audio_flat)
@@ -133,9 +160,12 @@ class ContinuousVoiceListener:
                                         pass
                                 raw_text = self.transcriber.transcribe_audio_array(full_audio)
                                 if raw_text:
-                                    if self.require_wake_word:
+                                    in_follow_up = self._in_follow_up_state or (time.time() < self._follow_up_expiry)
+
+                                    if self.require_wake_word and not in_follow_up:
                                         clean_query = extract_wake_word_query(raw_text, self.trigger_word)
                                         if clean_query:
+                                            self._in_follow_up_state = False
                                             if self.on_state_change:
                                                 try:
                                                     self.on_state_change("thinking", "Iris is thinking...")
@@ -153,13 +183,32 @@ class ContinuousVoiceListener:
                                                 except Exception:
                                                     pass
                                     else:
-                                        if self.on_speech_detected:
+                                        # Active conversational mode or follow-up turn
+                                        clean_query = extract_wake_word_query(raw_text, self.trigger_word) or raw_text.strip()
+                                        clean_lower = clean_query.lower()
+
+                                        # Stop phrases to exit conversation gracefully
+                                        if clean_lower in ("stop", "bye", "goodbye", "nevermind", "cancel", "exit", "quiet", "thanks", "thank you"):
+                                            self._in_follow_up_state = False
+                                            self._follow_up_expiry = 0.0
+                                            if self.on_state_change:
+                                                try:
+                                                    self.on_state_change("idle", None)
+                                                except Exception:
+                                                    pass
+                                        elif clean_query and self.on_speech_detected:
+                                            self._in_follow_up_state = False
+                                            if self.on_state_change:
+                                                try:
+                                                    self.on_state_change("thinking", "Iris is thinking...")
+                                                except Exception:
+                                                    pass
                                             try:
-                                                self.on_speech_detected(raw_text)
+                                                self.on_speech_detected(clean_query)
                                             except Exception as err:
                                                 print(f"[Continuous Listener Callback Error]: {err}")
                                 else:
-                                    if self.on_state_change:
+                                    if self.on_state_change and not self._in_follow_up_state:
                                         try:
                                             self.on_state_change("idle", None)
                                         except Exception:

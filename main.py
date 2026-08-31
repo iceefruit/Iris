@@ -47,7 +47,7 @@ def main():
         console.print("[bold cyan]✨ Launching Iris Desktop HUD & Wavy Voice Overlay...[/bold cyan]")
         console.print(f"[dim]Press [bold yellow]{config.ui_hotkey}[/bold yellow] at any time to toggle the top-right chat window.[/dim]")
         ui_app = IrisUIApp(agent=agent, voice_engine=voice_engine, vision_engine=vision_engine)
-        sys.exit(ui_app.start(show_chat=True, start_wake_word=config.voice_enabled))
+        sys.exit(ui_app.start(show_chat=True, start_wake_word=True))
 
     # Start global panic killswitch and task scheduler listeners
     killswitch.start()
