@@ -2,14 +2,9 @@
 
 import html
 import re
-from typing import Callable, Optional
-from PySide6.QtCore import Qt, QPoint, Signal, QPropertyAnimation, QEasingCurve
+from typing import Dict, List, Optional
+from PySide6.QtCore import Qt, QPoint, Signal
 from PySide6.QtGui import (
-    QColor,
-    QPainter,
-    QBrush,
-    QPen,
-    QFont,
     QTextCursor,
     QGuiApplication,
 )
@@ -21,7 +16,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTextBrowser,
     QPlainTextEdit,
-    QGraphicsDropShadowEffect,
     QFrame,
 )
 from config import config
@@ -53,7 +47,7 @@ def format_markdown_to_rich_html(raw_text: str) -> str:
         escaped,
     )
 
-    # 3. Detect ASCII diagrams / box drawing sections (lines with ┌─┐ etc.)
+    # 3. Detect ASCII diagrams / box drawing sections
     box_pattern = r"([┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬▀▄█▌▐░▒▓■□▪▫▲▼▶◀◆◇\+\-\|]{3,}[\s\S]*?(?:\n\n|\Z))"
 
     def replace_ascii_box(match):
@@ -133,36 +127,29 @@ class FloatingChatWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         self._drag_pos = QPoint()
-        self._current_assistant_buffer = ""
-        self._streaming_active = False
+        self.messages: List[Dict[str, str]] = []
 
         self._init_ui()
         self._position_top_right()
+        self._render_all_messages()
 
     def _init_ui(self) -> None:
-        """Initializes the glassmorphic dark interface."""
+        """Initializes the glassmorphic dark interface without negative shadow bounds."""
         self.setFixedSize(config.ui_width, config.ui_height)
 
-        # Root Card Frame
+        # Root Card Frame with styled glowing border
         self.card = QFrame(self)
         self.card.setGeometry(0, 0, self.width(), self.height())
-        self.card.setStyleSheet(f"""
-            QFrame {{
-                background-color: rgba(15, 23, 42, 0.94);
-                border: 1px solid rgba(56, 189, 248, 0.4);
-                border-radius: 14px;
-            }}
+        self.card.setStyleSheet("""
+            QFrame {
+                background-color: #0f172a;
+                border: 1.5px solid #38bdf8;
+                border-radius: 12px;
+            }
         """)
 
-        # Drop shadow effect
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(24)
-        shadow.setColor(QColor(0, 0, 0, 180))
-        shadow.setOffset(0, 8)
-        self.card.setGraphicsEffect(shadow)
-
         layout = QVBoxLayout(self.card)
-        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(8)
 
         # 1. Header Bar
@@ -226,8 +213,8 @@ class FloatingChatWindow(QWidget):
                 background-color: #0b0f19;
                 color: #e2e8f0;
                 border: 1px solid #1e293b;
-                border-radius: 10px;
-                padding: 10px;
+                border-radius: 8px;
+                padding: 8px;
                 font-family: 'Segoe UI', sans-serif;
                 font-size: 12px;
             }
@@ -306,14 +293,6 @@ class FloatingChatWindow(QWidget):
 
         layout.addLayout(input_row)
 
-        # Add initial welcome card
-        self._append_system_card(
-            "👋 <b>Welcome to Iris HUD</b><br/>"
-            "<span style='color:#94a3b8; font-size:11px;'>"
-            "Press <code>Ctrl+Shift+T</code> to toggle. Type your prompt, execute <code>/goal</code>, "
-            "or say <b>'Hey Iris'</b> for voice.</span>"
-        )
-
     def _position_top_right(self) -> None:
         """Positions the HUD in the top-right quadrant with margin."""
         screen = QGuiApplication.primaryScreen()
@@ -375,68 +354,87 @@ class FloatingChatWindow(QWidget):
 
     def add_user_message(self, text: str) -> None:
         """Adds styled user speech bubble."""
-        escaped = html.escape(text).replace("\n", "<br/>")
-        bubble_html = (
-            f'<div style="margin: 8px 0; text-align: right;">'
-            f'<div style="display: inline-block; background-color: #1e293b; color: #f1f5f9; '
-            f'border: 1px solid #334155; border-radius: 10px 10px 2px 10px; padding: 7px 12px; '
-            f'max-width: 85%; text-align: left; font-size: 12px;">'
-            f'{escaped}'
-            f'</div>'
-            f'</div>'
-        )
-        self.browser.append(bubble_html)
-        self.browser.moveCursor(QTextCursor.MoveOperation.End)
+        self.messages.append({"role": "user", "content": text})
+        self._render_all_messages()
 
     def start_assistant_message(self) -> None:
         """Prepares for streaming assistant response."""
-        self._current_assistant_buffer = ""
-        self._streaming_active = True
+        self.messages.append({"role": "assistant", "content": ""})
         self.set_status("Thinking...", "thinking")
+        self._render_all_messages()
 
     def append_assistant_chunk(self, chunk: str) -> None:
         """Streams chunk and updates current message."""
-        self._current_assistant_buffer += chunk
-        self._render_current_assistant_buffer()
+        if self.messages and self.messages[-1]["role"] == "assistant":
+            self.messages[-1]["content"] += chunk
+        else:
+            self.messages.append({"role": "assistant", "content": chunk})
+        self._render_all_messages()
 
     def finish_assistant_message(self, full_text: Optional[str] = None) -> None:
         """Finalizes the assistant message."""
-        if full_text:
-            self._current_assistant_buffer = full_text
-        self._render_current_assistant_buffer()
-        self._streaming_active = False
-        self._current_assistant_buffer = ""
+        if full_text is not None:
+            if self.messages and self.messages[-1]["role"] == "assistant":
+                self.messages[-1]["content"] = full_text
+            else:
+                self.messages.append({"role": "assistant", "content": full_text})
+        self._render_all_messages()
         self.set_status("Ready", "ready")
 
-    def _render_current_assistant_buffer(self) -> None:
-        """Renders rich HTML formatted assistant bubble."""
-        # For simplicity and clean scrolling, we can refresh the current document block or re-render
-        rich_content = format_markdown_to_rich_html(self._current_assistant_buffer)
-        bubble_html = (
-            f'<div style="margin: 8px 0; text-align: left;">'
-            f'<div style="display: inline-block; background-color: #0f172a; color: #e2e8f0; '
-            f'border: 1px solid #1e3a8a; border-radius: 10px 10px 10px 2px; padding: 8px 12px; '
-            f'max-width: 95%; font-size: 12px; line-height: 1.4;">'
-            f'<span style="color:#38bdf8; font-weight:bold; font-size:11px;">IRIS</span><br/>'
-            f'{rich_content}'
-            f'</div>'
-            f'</div>'
-        )
-        # Check if we should replace or append
-        # To maintain a simple, reliable scrollable view:
-        self.browser.undo()
-        self.browser.append(bubble_html)
-        self.browser.moveCursor(QTextCursor.MoveOperation.End)
+    def _render_all_messages(self) -> None:
+        """Renders entire conversation history with zero undo/cursor glitches."""
+        html_parts = [
+            '<div style="margin: 4px 0 10px 0; background-color: rgba(30, 41, 59, 0.7); '
+            'border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 8px 10px; '
+            'font-size: 11px; color: #cbd5e1;">'
+            '👋 <b>Welcome to Iris HUD</b><br/>'
+            '<span style="color:#94a3b8; font-size:10.5px;">'
+            'Press <code>Ctrl+Shift+T</code> to toggle. Type your prompt, execute <code>/goal</code>, '
+            'or say <b>"Hey Iris"</b> for voice.</span>'
+            '</div>'
+        ]
 
-    def _append_system_card(self, html_content: str) -> None:
-        card = (
-            f'<div style="margin: 6px 0; background-color: rgba(30, 41, 59, 0.6); '
-            f'border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 8px 10px; '
-            f'font-size: 11px; color: #cbd5e1;">'
-            f'{html_content}'
-            f'</div>'
+        for msg in self.messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "user":
+                escaped = html.escape(content).replace("\n", "<br/>")
+                html_parts.append(
+                    f'<div style="margin: 8px 0; text-align: right;">'
+                    f'<div style="display: inline-block; background-color: #1e293b; color: #f1f5f9; '
+                    f'border: 1px solid #334155; border-radius: 10px 10px 2px 10px; padding: 7px 12px; '
+                    f'max-width: 85%; text-align: left; font-size: 12px;">'
+                    f'{escaped}'
+                    f'</div>'
+                    f'</div>'
+                )
+            elif role == "assistant":
+                rich_content = format_markdown_to_rich_html(content)
+                html_parts.append(
+                    f'<div style="margin: 8px 0; text-align: left;">'
+                    f'<div style="display: inline-block; background-color: #0f172a; color: #e2e8f0; '
+                    f'border: 1px solid #1e3a8a; border-radius: 10px 10px 10px 2px; padding: 8px 12px; '
+                    f'max-width: 95%; font-size: 12px; line-height: 1.4;">'
+                    f'<span style="color:#38bdf8; font-weight:bold; font-size:11px;">IRIS</span><br/>'
+                    f'{rich_content}'
+                    f'</div>'
+                    f'</div>'
+                )
+            elif role == "system":
+                html_parts.append(
+                    f'<div style="margin: 6px 0; background-color: rgba(30, 41, 59, 0.6); '
+                    f'border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 8px 10px; '
+                    f'font-size: 11px; color: #cbd5e1;">'
+                    f'{content}'
+                    f'</div>'
+                )
+
+        full_html = (
+            f'<body style="background-color: #0b0f19; font-family: Segoe UI, sans-serif; margin: 0; padding: 0;">'
+            f'{"".join(html_parts)}'
+            f'</body>'
         )
-        self.browser.append(card)
+        self.browser.setHtml(full_html)
         self.browser.moveCursor(QTextCursor.MoveOperation.End)
 
     def toggle_visibility(self) -> None:

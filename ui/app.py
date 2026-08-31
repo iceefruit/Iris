@@ -115,12 +115,17 @@ class IrisUIApp:
     def _handle_mic_button_clicked(self) -> None:
         """Handles manual microphone trigger from the chat window."""
         def _listen_worker():
-            self.signals.state_changed.emit("listening", "Listening for 5s...")
-            transcription = self.voice.listen(duration_seconds=5.0)
-            if transcription and transcription.strip():
-                self.chat_window.add_user_message(transcription)
-                self._process_text_query(transcription, is_voice_reply=True)
-            else:
+            try:
+                self.signals.state_changed.emit("listening", "Listening for 5s...")
+                transcription = self.voice.listen(duration_seconds=5.0)
+                if transcription and transcription.strip():
+                    self.chat_window.add_user_message(transcription)
+                    self._process_text_query(transcription, is_voice_reply=True)
+                else:
+                    self.signals.state_changed.emit("idle", "")
+            except Exception as err:
+                print(f"[Voice Listen Error]: {err}")
+                self.signals.error_occurred.emit(f"Voice listening error: {err}")
                 self.signals.state_changed.emit("idle", "")
 
         threading.Thread(target=_listen_worker, daemon=True).start()
@@ -146,7 +151,6 @@ class IrisUIApp:
 
         try:
             full_response = ""
-            # Handle special slash commands in HUD
             lower = user_input.strip().lower()
 
             if lower.startswith("/act ") or lower.startswith("/goal "):
@@ -155,16 +159,18 @@ class IrisUIApp:
                 full_response = result.final_answer or "Action complete."
                 self.signals.chunk_received.emit(full_response)
             else:
-                # Normal or /speak conversation
                 speak_explicit = lower.startswith("/speak ")
                 clean_input = user_input[7:].strip() if speak_explicit else user_input
                 if speak_explicit:
                     is_voice_reply = True
 
                 for chunk in self.agent.ask(clean_input, execute_actions=True):
-                    if chunk.content:
-                        full_response += chunk.content
-                        self.signals.chunk_received.emit(chunk.content)
+                    if chunk.chunk_type == "content" and chunk.text:
+                        full_response += chunk.text
+                        self.signals.chunk_received.emit(chunk.text)
+                    elif chunk.chunk_type == "error":
+                        full_response += f"\n{chunk.text}"
+                        self.signals.chunk_received.emit(chunk.text)
 
             self.signals.response_completed.emit(full_response, is_voice_reply)
 
