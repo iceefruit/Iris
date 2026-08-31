@@ -126,6 +126,8 @@ class EmojiRegistry:
 
             logger.info(f"[EmojiRegistry] Discovered and registered {count} custom Discord emojis.")
 
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             logger.warning(f"[EmojiRegistry] Failed to fetch server emojis: {e}")
         finally:

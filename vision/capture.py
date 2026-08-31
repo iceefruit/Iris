@@ -57,7 +57,8 @@ class ScreenCaptureEngine:
         # Strategy 1: Ultra-fast multi-monitor capture via mss
         if mss:
             try:
-                with mss.mss() as sct:
+                mss_cls = getattr(mss, "MSS", mss.mss)
+                with mss_cls() as sct:
                     monitors = sct.monitors
                     if monitor_index < len(monitors):
                         target_mon = monitors[monitor_index]

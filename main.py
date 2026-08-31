@@ -74,8 +74,7 @@ def main():
     discord_bridge = DiscordIrisBridge(agent=agent)
 
     if getattr(config, "discord_autostart", False) and config.discord_user_token:
-        import threading
-        threading.Thread(target=lambda: asyncio.run(discord_bridge.start()), daemon=True).start()
+        discord_bridge.start_background()
         console.print("[dim green]✔ Discord Userbot Gateway auto-started in background.[/dim green]")
 
     try:
@@ -206,8 +205,7 @@ def main():
                         else:
                             console.print("[cyan]Starting Discord Userbot Gateway connection...[/cyan]")
                             if not discord_bridge.is_running:
-                                import threading
-                                threading.Thread(target=lambda: asyncio.run(discord_bridge.start()), daemon=True).start()
+                                discord_bridge.start_background()
                                 console.print("[green]✔ Discord Userbot Gateway running in background.[/green]")
                             else:
                                 console.print("[yellow]Discord Userbot is already running.[/yellow]")

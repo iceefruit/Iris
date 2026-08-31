@@ -208,18 +208,45 @@ class DiscordIrisBridge:
             logger.warning("[DiscordBridge] No DISCORD_USER_TOKEN provided in config or .env.")
             return False
 
-        # Launch gateway event consumer
-        self._bg_task = asyncio.create_task(self.gateway.run())
-
         # Dynamically discover and register accessible server emojis
         from integrations.discord.emojis import emoji_registry
-        asyncio.create_task(emoji_registry.fetch_user_guild_emojis(self.token))
+        self._emoji_task = asyncio.create_task(emoji_registry.fetch_user_guild_emojis(self.token))
 
+        # Run gateway loop until stopped
+        try:
+            await self.gateway.run()
+        finally:
+            if hasattr(self, "_emoji_task") and self._emoji_task and not self._emoji_task.done():
+                self._emoji_task.cancel()
+        return True
+
+    def start_background(self) -> bool:
+        """Starts the Discord bridge in a dedicated background thread."""
+        if not self.token:
+            logger.warning("[DiscordBridge] No DISCORD_USER_TOKEN provided in config or .env.")
+            return False
+        if self.is_running:
+            return True
+
+        import threading
+
+        def _runner():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self._loop = loop
+            try:
+                loop.run_until_complete(self.start())
+            except Exception as e:
+                logger.error(f"[DiscordBridge] Background worker error: {e}")
+            finally:
+                loop.close()
+
+        self._thread = threading.Thread(target=_runner, daemon=True)
+        self._thread.start()
         return True
 
     def stop(self):
         """Stops the bridge and cleans up resources."""
         self.gateway.stop()
-        if self._bg_task and not self._bg_task.done():
-            self._bg_task.cancel()
-        asyncio.create_task(self.rest_client.close())
+        if hasattr(self, "_loop") and self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self.rest_client.close(), self._loop)

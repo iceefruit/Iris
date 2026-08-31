@@ -42,7 +42,7 @@ class DiscordGateway:
             try:
                 self.ws = await websockets.connect(
                     url,
-                    max_size=10_000_000,
+                    max_size=50_000_000,
                     ping_interval=None,
                 )
                 return
@@ -133,6 +133,7 @@ class DiscordGateway:
 
     async def run(self):
         """Main connection and event processing loop."""
+        self._loop = asyncio.get_running_loop()
         self._is_running = True
         while self._is_running and self.is_valid_token:
             try:
@@ -210,4 +211,14 @@ class DiscordGateway:
         if self._heartbeat_task and not self._heartbeat_task.done():
             self._heartbeat_task.cancel()
         if self.ws:
-            asyncio.create_task(self.ws.close())
+            if hasattr(self, "_loop") and self._loop and self._loop.is_running():
+                try:
+                    asyncio.run_coroutine_threadsafe(self.ws.close(), self._loop)
+                except Exception:
+                    pass
+            else:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self.ws.close())
+                except RuntimeError:
+                    pass
