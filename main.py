@@ -70,6 +70,13 @@ def main():
     vision_engine = VisionEngine()
     voice_engine = VoiceEngine()
     selection_tool = GetActiveSelectionTool()
+    from integrations.discord import DiscordIrisBridge
+    discord_bridge = DiscordIrisBridge(agent=agent)
+
+    if getattr(config, "discord_autostart", False) and config.discord_user_token:
+        import threading
+        threading.Thread(target=lambda: asyncio.run(discord_bridge.start()), daemon=True).start()
+        console.print("[dim green]✔ Discord Userbot Gateway auto-started in background.[/dim green]")
 
     try:
         while True:
@@ -185,6 +192,44 @@ def main():
                         console.print(f"[green]✔ Switched active workspace to:[/green] [bold]{sname}[/bold]")
                     else:
                         console.print(f"[yellow]Active session:[/yellow] [bold]{session_manager.active_session}[/bold]")
+                    continue
+
+                # Discord Userbot Commands (/discord, /discord-start, /discord-stop)
+                elif user_input.lower().startswith(("/discord", "/userbot")):
+                    from integrations.discord import DiscordIrisBridge
+                    parts = user_input.split(" ", 1)
+                    sub = parts[1].strip().lower() if len(parts) > 1 else "status"
+
+                    if sub in ("start", "connect", "on"):
+                        if not config.discord_user_token:
+                            console.print("[dim red]No DISCORD_USER_TOKEN set in config or .env.[/dim red]")
+                        else:
+                            console.print("[cyan]Starting Discord Userbot Gateway connection...[/cyan]")
+                            if not discord_bridge.is_running:
+                                import threading
+                                threading.Thread(target=lambda: asyncio.run(discord_bridge.start()), daemon=True).start()
+                                console.print("[green]✔ Discord Userbot Gateway running in background.[/green]")
+                            else:
+                                console.print("[yellow]Discord Userbot is already running.[/yellow]")
+
+                    elif sub in ("stop", "disconnect", "off"):
+                        discord_bridge.stop()
+                        console.print("[yellow]✔ Discord Userbot disconnected.[/yellow]")
+
+                    else:
+                        status_str = "[bold green]Online / Listening[/bold green]" if discord_bridge.is_running else "[dim red]Offline[/dim red]"
+                        user_info = discord_bridge.gateway.user
+                        uname = f"{user_info.get('username')}#{user_info.get('discriminator', '0000')}" if user_info else "Not logged in"
+                        tbl = Table(title="🤖 Discord Userbot Bridge Status", border_style="cyan")
+                        tbl.add_column("Property", style="bold yellow")
+                        tbl.add_column("Value", style="white")
+                        tbl.add_row("Connection Status", status_str)
+                        tbl.add_row("User Account", uname)
+                        tbl.add_row("Trigger Keyword", f"[bold cyan]{config.discord_trigger_word}[/bold cyan]")
+                        tbl.add_row("Token Configured", "✔ Yes" if bool(config.discord_user_token) else "❌ No")
+                        tbl.add_row("Allowed Users", config.discord_allowed_users or "All users (DM & Channel)")
+                        console.print(tbl)
+                        console.print("[dim]Use '/discord start' to connect or '/discord stop' to disconnect.[/dim]")
                     continue
 
                 # Persistent Facts Command (/facts)
@@ -317,6 +362,7 @@ def main():
         killswitch.stop()
         scheduler.shutdown()
         voice_engine.stop()
+        discord_bridge.stop()
 
 
 if __name__ == "__main__":

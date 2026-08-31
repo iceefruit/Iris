@@ -53,6 +53,12 @@ class AppConfig(BaseSettings):
     # Optional n8n Webhook
     n8n_webhook_url: str = Field(default="", validation_alias="N8N_WEBHOOK_URL")
 
+    # Discord Userbot Bridge Configuration
+    discord_user_token: str = Field(default="", validation_alias="DISCORD_USER_TOKEN")
+    discord_trigger_word: str = Field(default="iris", validation_alias="DISCORD_TRIGGER_WORD")
+    discord_allowed_users: str = Field(default="", validation_alias="DISCORD_ALLOWED_USERS")
+    discord_autostart: bool = Field(default=False, validation_alias="DISCORD_AUTOSTART")
+
     # Vision Engine Configuration
     vision_service: str = Field(
         default="qwen-max",
